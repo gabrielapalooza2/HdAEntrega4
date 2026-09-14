@@ -1,0 +1,129 @@
+{
+  "type": "record",
+  "name": "EventoEstadoDeHabilitacionCambiado",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "time",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "ingestion",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "specversion",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "type",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "datacontenttype",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "service_name",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "correlation_id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "data",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "EstadoDeHabilitacionCambiadoPayload",
+          "fields": [
+            {
+              "name": "proveedor_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "nombre",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "estado",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "categorias",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "ciudades",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "motivo",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "vigente_hasta",
+              "type": [
+                "null",
+                "long"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
