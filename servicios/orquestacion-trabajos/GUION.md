@@ -5,6 +5,29 @@ Duración: ~13 min.
 
 ---
 
+## LA FORMA FACIL: que el script conduzca
+
+En vez de tipear cada comando, corré:
+
+```bash
+./scripts/demo.sh
+```
+
+Te muestra el comando, espera que aprietes **Enter**, lo corre, y espera otro
+Enter para seguir. No tipeás ni pegás nada durante la grabación: hablás y
+apretás Enter. Además **captura solo el `trabajo_id`**, que es donde más fácil
+se traba una toma.
+
+```bash
+./scripts/demo.sh        # todas las escenas, en orden
+./scripts/demo.sh 4      # arranca desde la escena 4
+./scripts/demo.sh 4 6    # de la 4 a la 6, para ensayar una parte
+```
+
+El texto a decir en cada escena está más abajo en este mismo documento.
+
+---
+
 ## ANTES DE GRABAR
 
 ```bash
