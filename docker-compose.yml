@@ -1,0 +1,207 @@
+# Hogar de los Alpes — Entrega 4
+# Los cuatro microservicios, UN cluster de Apache Pulsar y UNA base de datos POR SERVICIO.
+#
+#   make infra      # Pulsar + las 4 bases
+#   make topicos    # tenant, namespace, 12 tópicos, retención, compatibilidad
+#   make servicios  # los 4 microservicios
+#
+# Por qué un cluster (zookeeper + bookie + broker) y no `pulsar standalone`:
+# la rúbrica da 5 puntos por "configuró, desplegó y usó un cluster en Apache Pulsar".
+# Standalone arranca más rápido pero es un solo proceso: no es un cluster.
+name: hda-entrega4
+
+networks:
+  hda:
+    driver: bridge
+
+# ─────────────────────────── Apache Pulsar ───────────────────────────
+services:
+  zookeeper:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: zookeeper
+    restart: on-failure
+    networks: [hda]
+    volumes: ["./data/zookeeper:/pulsar/data/zookeeper"]
+    environment: ["metadataStoreUrl=zk:zookeeper:2181"]
+    command: >
+      bash -c "bin/apply-config-from-env.py conf/zookeeper.conf &&
+               bin/generate-zookeeper-config.sh conf/zookeeper.conf &&
+               exec bin/pulsar zookeeper"
+    healthcheck:
+      test: ["CMD", "bin/pulsar-zookeeper-ruok.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  pulsar-init:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: pulsar-init
+    networks: [hda]
+    command: >
+      bin/pulsar initialize-cluster-metadata
+      --cluster cluster-a --zookeeper zookeeper:2181
+      --configuration-store zookeeper:2181
+      --web-service-url http://broker:8080
+      --broker-service-url pulsar://broker:6650
+    depends_on:
+      zookeeper: {condition: service_healthy}
+
+  bookie:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: bookie
+    restart: on-failure
+    networks: [hda]
+    environment:
+      - clusterName=cluster-a
+      - zkServers=zookeeper:2181
+      - metadataServiceUri=metadata-store:zk:zookeeper:2181
+    volumes: ["./data/bookkeeper:/pulsar/data/bookkeeper"]
+    depends_on:
+      zookeeper:    {condition: service_healthy}
+      pulsar-init:  {condition: service_completed_successfully}
+    command: bash -c "bin/apply-config-from-env.py conf/bookkeeper.conf && exec bin/pulsar bookie"
+
+  broker:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: broker
+    hostname: broker
+    restart: on-failure
+    networks: [hda]
+    environment:
+      - metadataStoreUrl=zk:zookeeper:2181
+      - zookeeperServers=zookeeper:2181
+      - clusterName=cluster-a
+      - managedLedgerDefaultEnsembleSize=1
+      - managedLedgerDefaultWriteQuorum=1
+      - managedLedgerDefaultAckQuorum=1
+      - advertisedAddress=broker
+      - advertisedListeners=external:pulsar://127.0.0.1:6650
+      - brokerServiceCompactionThresholdInBytes=10485760
+    depends_on:
+      zookeeper: {condition: service_healthy}
+      bookie:    {condition: service_started}
+    ports: ["6650:6650", "8080:8080"]
+    command: bash -c "bin/apply-config-from-env.py conf/broker.conf && exec bin/pulsar broker"
+    healthcheck:
+      test: ["CMD", "bin/pulsar-admin", "brokers", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+# ──────────────── UNA base de datos POR SERVICIO ────────────────
+# No es redundancia: es la decisión de arquitectura que sostiene los tres
+# escenarios de calidad. Ningún servicio lee ni escribe el almacén de otro.
+  db-trabajos:
+    image: postgres:16-alpine
+    container_name: db-trabajos
+    networks: [hda]
+    environment: [POSTGRES_DB=trabajos, POSTGRES_USER=trabajos, POSTGRES_PASSWORD=trabajos]
+    ports: ["5432:5432"]
+    volumes: ["./data/pg-trabajos:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U trabajos"], interval: 5s, retries: 20}
+
+  db-partners:
+    image: postgres:16-alpine
+    container_name: db-partners
+    networks: [hda]
+    environment: [POSTGRES_DB=partners, POSTGRES_USER=partners, POSTGRES_PASSWORD=partners]
+    ports: ["5433:5432"]
+    volumes: ["./data/pg-partners:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U partners"], interval: 5s, retries: 20}
+
+  db-emparejamiento:
+    image: postgres:16-alpine
+    container_name: db-emparejamiento
+    networks: [hda]
+    environment: [POSTGRES_DB=emparejamiento, POSTGRES_USER=emparejamiento, POSTGRES_PASSWORD=emparejamiento]
+    ports: ["5434:5432"]
+    volumes: ["./data/pg-emparejamiento:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U emparejamiento"], interval: 5s, retries: 20}
+
+  db-acreditacion:
+    image: postgres:16-alpine
+    container_name: db-acreditacion
+    networks: [hda]
+    environment: [POSTGRES_DB=acreditacion, POSTGRES_USER=acreditacion, POSTGRES_PASSWORD=acreditacion]
+    ports: ["5435:5432"]
+    volumes: ["./data/pg-acreditacion:/var/lib/postgresql/data"]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U acreditacion"], interval: 5s, retries: 20}
+
+# ─────────────────────── Los 4 microservicios ───────────────────────
+  orquestacion-trabajos:
+    build: ./servicios/orquestacion-trabajos
+    image: hda/orquestacion-trabajos
+    container_name: orquestacion-trabajos
+    networks: [hda]
+    depends_on:
+      broker:      {condition: service_healthy}
+      db-trabajos: {condition: service_healthy}
+    environment:
+      - PULSAR_ADDRESS=broker
+      - PULSAR_URL=pulsar://broker:6650
+      - PULSAR_ADMIN_URL=http://broker:8080
+      - DATABASE_DSN=postgresql+psycopg://trabajos:trabajos@db-trabajos:5432/trabajos
+      - DB_HOSTNAME=db-trabajos
+      - DB_USERNAME=trabajos
+      - DB_PASSWORD=trabajos
+      - DB_NAME=trabajos
+      - CONTRATOS_DIR=/app/contratos
+      - SERVICE_NAME=orquestacion-trabajos
+    volumes: ["./contratos:/app/contratos:ro"]
+    ports: ["5001:5000"]
+
+  motor-reglas-partner:
+    build: ./servicios/motor-reglas-partner
+    image: hda/motor-reglas-partner
+    container_name: motor-reglas-partner
+    networks: [hda]
+    depends_on:
+      broker:      {condition: service_healthy}
+      db-partners: {condition: service_healthy}
+    environment:
+      - PULSAR_ADDRESS=broker
+      - DB_HOSTNAME=db-partners
+      - DB_USERNAME=partners
+      - DB_PASSWORD=partners
+      - DB_NAME=partners
+      - SERVICE_NAME=motor-reglas-partner
+    volumes: ["./contratos:/app/contratos:ro"]
+    ports: ["5002:5000"]
+
+  emparejamiento-asignacion:
+    build: ./servicios/emparejamiento-asignacion
+    image: hda/emparejamiento-asignacion
+    container_name: emparejamiento-asignacion
+    networks: [hda]
+    depends_on:
+      broker:            {condition: service_healthy}
+      db-emparejamiento: {condition: service_healthy}
+    environment:
+      - PULSAR_URL=pulsar://broker:6650
+      - PULSAR_ADMIN_URL=http://broker:8080
+      - DATABASE_DSN=postgresql+psycopg://emparejamiento:emparejamiento@db-emparejamiento:5432/emparejamiento
+      - CONTRATOS_DIR=/app/contratos
+    volumes: ["./contratos:/app/contratos:ro"]
+    ports: ["8000:8000"]
+
+  acreditacion-habilitacion:
+    build: ./servicios/acreditacion-habilitacion
+    image: hda/acreditacion-habilitacion
+    container_name: acreditacion-habilitacion
+    networks: [hda]
+    depends_on:
+      broker:          {condition: service_healthy}
+      db-acreditacion: {condition: service_healthy}
+    environment:
+      - PULSAR_ADDRESS=broker
+      - PULSAR_URL=pulsar://broker:6650
+      - PULSAR_ADMIN_URL=http://broker:8080
+      - DATABASE_DSN=postgresql+psycopg://acreditacion:acreditacion@db-acreditacion:5432/acreditacion
+      - DB_HOSTNAME=db-acreditacion
+      - DB_USERNAME=acreditacion
+      - DB_PASSWORD=acreditacion
+      - DB_NAME=acreditacion
+      - CONTRATOS_DIR=/app/contratos
+      - SERVICE_NAME=acreditacion-habilitacion
+    volumes: ["./contratos:/app/contratos:ro"]
+    ports: ["5004:5000"]

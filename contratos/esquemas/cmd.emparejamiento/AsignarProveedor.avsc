@@ -1,0 +1,105 @@
+{
+  "type": "record",
+  "name": "ComandoAsignarProveedor",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "time",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "ingestion",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "specversion",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "type",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "datacontenttype",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "service_name",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "correlation_id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "data",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "AsignarProveedorPayload",
+          "fields": [
+            {
+              "name": "trabajo_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "motivo",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "excluir_proveedores",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "intento",
+              "type": [
+                "null",
+                "int"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

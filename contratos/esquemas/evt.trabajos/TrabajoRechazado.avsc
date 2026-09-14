@@ -1,0 +1,109 @@
+{
+  "type": "record",
+  "name": "EventoTrabajoRechazado",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "time",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "ingestion",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "specversion",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "type",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "datacontenttype",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "service_name",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "correlation_id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "data",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "TrabajoRechazadoPayload",
+          "fields": [
+            {
+              "name": "trabajo_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "partner_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "categoria",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "motivo",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "detalle",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
