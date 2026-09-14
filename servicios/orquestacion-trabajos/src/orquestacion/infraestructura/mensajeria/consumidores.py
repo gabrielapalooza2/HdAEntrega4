@@ -51,6 +51,7 @@ def escuchar(sus: Suscripcion, parar: threading.Event) -> None:
         # Warn y no Info: por defecto el cliente nativo escupe ~30 lineas por
         # conexion y sepulta el log util del servicio.
         logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn),
+        **config.opciones_cliente(),
     )
     try:
         consumidor = _abrir(cliente, sus)

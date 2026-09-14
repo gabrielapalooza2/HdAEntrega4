@@ -41,6 +41,29 @@ def broker_url() -> str:
     return f"pulsar://{os.getenv('PULSAR_ADDRESS', 'localhost')}:6650"
 
 
+# ─────────────────────────────────────────────── listener de Pulsar ─────────
+# El broker puede anunciar VARIAS direcciones para el mismo topico, una por
+# "listener". Hace falta porque la direccion util depende de donde este el
+# cliente:
+#
+#   internal -> broker:6650      los microservicios, dentro de la red de Docker
+#   external -> 127.0.0.1:6650   los scripts, corriendo en el host
+#
+# Un cliente que no pide listener recibe el interno, que es lo correcto para los
+# servicios. Los scripts del host exportan PULSAR_LISTENER=external.
+#
+# Sin esto, un servicio en un contenedor recibe "conectate a 127.0.0.1" y muere
+# con Connection refused, porque en SU contenedor esa direccion no es el broker.
+def listener() -> str | None:
+    return os.getenv("PULSAR_LISTENER") or None
+
+
+def opciones_cliente() -> dict:
+    """kwargs extra para pulsar.Client. Vacio si no hay listener configurado."""
+    nombre = listener()
+    return {"listener_name": nombre} if nombre else {}
+
+
 # ────────────────────────────────────────────────────────────── PostgreSQL ──
 def dsn() -> str:
     """DSN en formato libpq, que es lo que entiende psycopg3.

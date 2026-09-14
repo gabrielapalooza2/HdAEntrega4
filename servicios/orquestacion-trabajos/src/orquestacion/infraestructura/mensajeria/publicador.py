@@ -34,6 +34,7 @@ class Publicador:
             self._cliente = pulsar.Client(
                 config.broker_url(),
                 logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn),
+                **config.opciones_cliente(),
             )
         if topico not in self._productores:
             self._productores[topico] = self._cliente.create_producer(
