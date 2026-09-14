@@ -1,0 +1,207 @@
+{
+  "type": "record",
+  "name": "EventoReglaDePartnerActualizada",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "time",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "ingestion",
+      "type": [
+        "null",
+        "long"
+      ]
+    },
+    {
+      "name": "specversion",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "type",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "datacontenttype",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "service_name",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "correlation_id",
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    {
+      "name": "data",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "ReglaDePartnerActualizadaPayload",
+          "fields": [
+            {
+              "name": "partner_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "convenio_id",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "nombre",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "tipo_partner",
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            {
+              "name": "activo",
+              "type": [
+                "null",
+                "boolean"
+              ]
+            },
+            {
+              "name": "vigencia_desde",
+              "type": [
+                "null",
+                "long"
+              ]
+            },
+            {
+              "name": "vigencia_hasta",
+              "type": [
+                "null",
+                "long"
+              ]
+            },
+            {
+              "name": "version_regla",
+              "type": [
+                "null",
+                "int"
+              ]
+            },
+            {
+              "name": "cobertura_contratada",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "sla_minutos",
+              "type": [
+                "null",
+                "int"
+              ]
+            },
+            {
+              "name": "monto_maximo_sin_aprobacion",
+              "type": [
+                "null",
+                {
+                  "type": "record",
+                  "name": "DineroSchema",
+                  "fields": [
+                    {
+                      "name": "monto",
+                      "type": [
+                        "null",
+                        "long"
+                      ]
+                    },
+                    {
+                      "name": "moneda",
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "pasos_de_aprobacion",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "red_homologada",
+              "type": [
+                "null",
+                {
+                  "type": "array",
+                  "items": "string"
+                }
+              ]
+            },
+            {
+              "name": "porcentaje_comision",
+              "type": [
+                "null",
+                "float"
+              ]
+            },
+            {
+              "name": "moneda_tarifa",
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+# Cluster de Apache Pulsar (zookeeper + bookie + broker) + PostgreSQL + el servicio.
+#
+#   docker compose up -d zookeeper pulsar-init bookie broker db
+#   ./scripts/crear_topicos.sh
+#   docker compose up -d motor-reglas-partner
+#
+name: hda-entrega4
+
+networks:
+  pulsar:
+    driver: bridge
+
+services:
+  zookeeper:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: zookeeper
+    restart: on-failure
+    networks: [pulsar]
+    volumes:
+      - ./data/zookeeper:/pulsar/data/zookeeper
+    environment:
+      - metadataStoreUrl=zk:zookeeper:2181
+    command: >
+      bash -c "bin/apply-config-from-env.py conf/zookeeper.conf && \
+               bin/generate-zookeeper-config.sh conf/zookeeper.conf && \
+               exec bin/pulsar zookeeper"
+    healthcheck:
+      test: ["CMD", "bin/pulsar-zookeeper-ruok.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  pulsar-init:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: pulsar-init
+    networks: [pulsar]
+    command: >
+      bin/pulsar initialize-cluster-metadata
+      --cluster cluster-a --zookeeper zookeeper:2181
+      --configuration-store zookeeper:2181
+      --web-service-url http://broker:8080
+      --broker-service-url pulsar://broker:6650
+    depends_on:
+      zookeeper: {condition: service_healthy}
+
+  bookie:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: bookie
+    restart: on-failure
+    networks: [pulsar]
+    environment:
+      - clusterName=cluster-a
+      - zkServers=zookeeper:2181
+      - metadataServiceUri=metadata-store:zk:zookeeper:2181
+    volumes:
+      - ./data/bookkeeper:/pulsar/data/bookkeeper
+    depends_on:
+      zookeeper: {condition: service_healthy}
+      pulsar-init: {condition: service_completed_successfully}
+    command: bash -c "bin/apply-config-from-env.py conf/bookkeeper.conf && exec bin/pulsar bookie"
+
+  broker:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: broker
+    hostname: broker
+    restart: on-failure
+    networks: [pulsar]
+    environment:
+      - metadataStoreUrl=zk:zookeeper:2181
+      - zookeeperServers=zookeeper:2181
+      - clusterName=cluster-a
+      - managedLedgerDefaultEnsembleSize=1
+      - managedLedgerDefaultWriteQuorum=1
+      - managedLedgerDefaultAckQuorum=1
+      - advertisedAddress=broker
+      - advertisedListeners=external:pulsar://127.0.0.1:6650
+      # habilita la compactación automática de los tópicos de carga de estado
+      - brokerServiceCompactionThresholdInBytes=10485760
+    depends_on:
+      zookeeper: {condition: service_healthy}
+      bookie:    {condition: service_started}
+    ports: ["6650:6650", "8080:8080"]
+    command: bash -c "bin/apply-config-from-env.py conf/broker.conf && exec bin/pulsar broker"
+    healthcheck:
+      test: ["CMD", "bin/pulsar-admin", "brokers", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  # Base de datos PROPIA de este servicio. Ningún otro microservicio la toca:
+  # es la decisión que sostiene los tres escenarios de calidad.
+  db:
+    image: postgres:16-alpine
+    container_name: partners-db
+    restart: always
+    networks: [pulsar]
+    environment:
+      - POSTGRES_DB=partners
+      - POSTGRES_USER=partners
+      - POSTGRES_PASSWORD=partners
+    ports: ["5432:5432"]
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U partners"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  motor-reglas-partner:
+    build: .
+    image: hda/motor-reglas-partner
+    container_name: motor-reglas-partner
+    networks: [pulsar]
+    depends_on:
+      broker: {condition: service_healthy}
+      db:     {condition: service_healthy}
+    environment:
+      - PULSAR_ADDRESS=broker
+      - DB_HOSTNAME=db
+      - DB_USERNAME=partners
+      - DB_PASSWORD=partners
+      - DB_NAME=partners
+      - SERVICE_NAME=motor-reglas-partner
+      - LOG_LEVEL=INFO
+    ports: ["5000:5000"]
