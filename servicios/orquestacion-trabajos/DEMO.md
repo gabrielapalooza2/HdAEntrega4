@@ -41,7 +41,20 @@ curl -s localhost:8000/health   # {"status":"ok",...}
 
 Si `emparejamiento` no responde, dale 30 s más y reintentá: tarda en suscribirse.
 
-### 0.4 Variables para tu terminal de grabación
+### 0.4 Sembrar los datos de la demo
+
+```bash
+cd servicios/orquestacion-trabajos
+export PULSAR_URL=pulsar://localhost:6650
+export PULSAR_LISTENER=external
+./scripts/reiniciar_demo.sh
+```
+
+Este script **también sirve entre tomas**: borra los datos de los dos servicios
+y vuelve a sembrar en segundos, sin rearmar el cluster. Si te equivocás grabando,
+corrélo y empezá de nuevo.
+
+### 0.5 Variables para tu terminal de grabación
 
 ```bash
 cd ~/HdAEntrega4/servicios/orquestacion-trabajos
@@ -50,7 +63,7 @@ export PULSAR_LISTENER=external          # imprescindible desde el host
 alias py=./.venv/bin/python
 ```
 
-### 0.5 Preparar la pantalla
+### 0.6 Preparar la pantalla
 
 Tres terminales visibles a la vez:
 
@@ -290,7 +303,8 @@ orquestacion       consume el ajeno -> ASIGNADO
 |---|---|---|
 | `Connection refused` a `127.0.0.1:6650` | falta `PULSAR_LISTENER=external` | exportalo |
 | `PARTNER_DESCONOCIDO` en todo | la proyección de reglas está vacía | `py scripts/seed.py` |
-| Emparejamiento dice `sin_candidatos` | no hay proveedores, o la ciudad no coincide | republicá proveedores en `BOGOTA` |
+| Emparejamiento dice `sin_candidatos` | no hay proveedores, o la ciudad no coincide | `py scripts/sembrar_proveedores.py` |
+| Te equivocaste en una toma | — | `./scripts/reiniciar_demo.sh` y volvé a empezar |
 | `pulsar-init` exit 137 | Compose relanzó las dependencias | usá `--no-deps` |
 | El broker no levanta | estado viejo en `data/` | `docker compose down -v && rm -rf data/` |
 
