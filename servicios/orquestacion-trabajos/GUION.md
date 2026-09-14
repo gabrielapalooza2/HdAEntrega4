@@ -38,8 +38,30 @@ alias py=./.venv/bin/python
 ./scripts/reiniciar_demo.sh
 ```
 
-Terminal B: `docker logs -f --tail 5 orquestacion-trabajos | grep -v "GET /health"`
-Terminal C: `docker logs -f --tail 5 emparejamiento-asignacion | grep "emparejamiento\."`
+### Las tres terminales
+
+**Terminal A** es la unica donde se escribe. **B y C solo miran logs**: no se
+corre ningun comando de la demo en ellas.
+
+**Terminal B** — tu servicio:
+
+```bash
+docker logs -f --tail 30 orquestacion-trabajos 2>&1 | grep -E "orquestacion\.(aplicacion|infraestructura)"
+```
+
+**Terminal C** — Emparejamiento:
+
+```bash
+docker logs -f --tail 30 emparejamiento-asignacion 2>&1 | grep -E "emparejamiento\.(application|pulsar)"
+```
+
+> El filtro de C no es capricho: el cliente nativo de Pulsar escupe
+> estadisticas de consumidor cada minuto y sepulta las lineas utiles. Sin el
+> grep, la linea "publicado TrabajoAsignado" se pierde entre el ruido justo
+> cuando la necesitas.
+
+Las dos arrancan mostrando actividad reciente, asi confirmas que estan
+enganchadas antes de grabar.
 
 Limpiá las tres pantallas (`clear`) y empezá.
 
