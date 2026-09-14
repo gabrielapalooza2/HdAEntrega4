@@ -93,9 +93,46 @@ done
 # esperar ~1 min y volver a consultar: queda en ESCALADO_MANUAL
 ```
 
-> **La cadena se corta en el paso 8.** Emparejamiento declara
-> `cmd.emparejamiento` como "no se consume (E5)", así que el comando sale bien
+> **La cadena se corta en el paso 8.** Emparejamiento tiene un test que
+> **exige** no consumir `cmd.emparejamiento`, así que el comando sale bien
 > formado pero nadie lo recoge. Es deuda del grupo, no de este servicio.
+
+## Demo con Emparejamiento y Asignación
+
+Con los dos servicios levantados, el camino principal cierra en coreografía
+pura:
+
+```
+orquestacion-trabajos      CrearTrabajo -> TrabajoCreado
+emparejamiento-asignacion  reacciona, asigna -> TrabajoAsignado
+orquestacion-trabajos      consume el ajeno -> ASIGNADO
+```
+
+Emparejamiento necesita proveedores habilitados, que publica Acreditación
+(todavía no existe). Hasta que exista, se simulan publicando
+`EstadoDeHabilitacionCambiado` en `evt.proveedores`.
+
+> **Cuidado con las mayúsculas.** Emparejamiento compara la ciudad con `in`
+> exacto y no normaliza: si sus proveedores están en `"Bogota"` y el trabajo va
+> con `zona="BOGOTA"`, no encuentra candidatos. Hay que acordar la
+> normalización con el grupo.
+
+## Reconstruir la proyección de reglas
+
+`evt.partners` está compactado para poder reconstruir la proyección releyéndolo.
+Pero `initial_position=Earliest` solo aplica a una suscripción **nueva**: si se
+pierde la base y la suscripción sobrevive, su cursor ya está avanzado y no hay
+replay. Para forzarla:
+
+```bash
+docker exec broker bin/pulsar-admin topics reset-cursor \
+  persistent://hda/poc/evt.partners \
+  --subscription orquestacion-trabajos-reglas --time 1d
+```
+
+Al reiniciar, el servicio rehace la proyección solo. El consumidor de reglas
+**no** usa `mensajes_procesados` justamente para que ese replay funcione; ver
+DECISIONES.md §4.
 
 ## Verificar las reglas duras
 
