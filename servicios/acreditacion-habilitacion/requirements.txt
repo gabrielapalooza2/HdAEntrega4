@@ -1,0 +1,7 @@
+flask>=3.0,<4.0
+gunicorn>=21.2,<23.0
+sqlalchemy>=2.0,<3.0
+psycopg[binary]>=3.1,<4.0
+pulsar-client>=3.5,<4.0
+fastavro>=1.9,<2.0
+pybreaker>=1.2,<2.0
