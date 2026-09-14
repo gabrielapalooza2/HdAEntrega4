@@ -46,22 +46,26 @@ corre ningun comando de la demo en ellas.
 **Terminal B** — tu servicio:
 
 ```bash
-docker logs -f --tail 30 orquestacion-trabajos 2>&1 | grep -E "orquestacion\.(aplicacion|infraestructura)"
+docker logs -f --tail 1000 orquestacion-trabajos 2>&1 | grep --line-buffered -E "orquestacion\.(aplicacion|infraestructura)"
 ```
 
 **Terminal C** — Emparejamiento:
 
 ```bash
-docker logs -f --tail 30 emparejamiento-asignacion 2>&1 | grep -E "emparejamiento\.(application|pulsar)"
+docker logs -f --tail 1000 emparejamiento-asignacion 2>&1 | grep --line-buffered -E "emparejamiento\.(application|pulsar)"
 ```
 
-> El filtro de C no es capricho: el cliente nativo de Pulsar escupe
-> estadisticas de consumidor cada minuto y sepulta las lineas utiles. Sin el
-> grep, la linea "publicado TrabajoAsignado" se pierde entre el ruido justo
-> cuando la necesitas.
+> **`--tail 1000` no es exagerado, es lo minimo.** El cliente nativo de Pulsar
+> escupe estadisticas de consumidor cada minuto: con `--tail 30` las ultimas
+> treinta lineas son TODAS ruido, el filtro no deja pasar nada y la terminal se
+> ve vacia, como si estuviera rota. Medido: con 30 hay cero coincidencias, con
+> 1000 hay decenas.
+>
+> **`--line-buffered` tampoco sobra:** sin el, grep acumula la salida en un
+> buffer y las lineas nuevas aparecen a los saltos en vez de en el momento.
 
 Las dos arrancan mostrando actividad reciente, asi confirmas que estan
-enganchadas antes de grabar.
+enganchadas antes de grabar. Si salen vacias, algo esta mal.
 
 Limpiá las tres pantallas (`clear`) y empezá.
 
