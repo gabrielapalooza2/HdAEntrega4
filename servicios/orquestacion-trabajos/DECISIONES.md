@@ -85,6 +85,36 @@ malformado reventaría al insertarlo en una columna UUID → `negative_acknowled
 → reentrega infinita: **un mensaje venenoso en bucle**. Se deriva un `uuid5`
 determinista del texto, que conserva la idempotencia sin perder el mensaje.
 
+### Dónde NO se usa `mensajes_procesados`, y por qué
+
+El consumidor de `evt.partners` **no marca los sobres**. Es una decisión, no un
+olvido, y salió de un fallo observado al probar los dos servicios juntos.
+
+La marca por id de mensaje protege **efectos que no son idempotentes por sí
+mismos**: crear un trabajo dos veces crea dos trabajos. Pero la proyección de
+reglas es una **proyección pura con guarda de versión**: aplicar la misma regla
+dos veces da exactamente el mismo resultado, porque la guarda convierte la
+repetición en un no-op. La marca no agrega ninguna seguridad.
+
+Y sí hace daño. `evt.partners` está compactado precisamente para que una réplica
+nueva —o una base restaurada— pueda **reconstruir** la proyección releyendo el
+tópico desde el inicio. Con la marca puesta, ese replay se descartaría entero
+como "ya procesado" y la proyección quedaría **vacía**: la idempotencia habría
+bloqueado la reconstrucción.
+
+> **Regla:** idempotencia por **versión** donde el estado converge; idempotencia
+> por **id de mensaje** solo donde el efecto no es repetible.
+
+**Salvedad operativa.** `initial_position=Earliest` solo aplica a una suscripción
+**nueva**. Si se pierde la base pero la suscripción sobrevive, su cursor ya está
+avanzado y no hay replay. Para forzar la reconstrucción:
+
+```bash
+docker exec broker bin/pulsar-admin topics reset-cursor \
+  persistent://hda/poc/evt.partners \
+  --subscription orquestacion-trabajos-reglas --time 1d
+```
+
 ---
 
 ## 5. El congelamiento del SLA ocurre en el event store, no en el cable
@@ -326,8 +356,40 @@ Correspondencia de estados:
 
 | # | Tema | Impacto |
 |---|---|---|
-| 1 | **Nadie consume `cmd.emparejamiento`** (E5). La reasignación publica al vacío. | La demo de punta a punta se corta ahí |
+| 1 | **Nadie consume `cmd.emparejamiento`**. Emparejamiento tiene un test, `test_sin_asignar_proveedor.py`, que **exige** no consumirlo (`assert "cmd.emparejamiento" not in texto`). No es un olvido: es una decisión blindada. | La rama de **reasignación** publica al vacío. El camino principal sí cierra (ver abajo) |
+| 1b | `candidatos_habilitados` de Emparejamiento compara ciudad con `in` exacto, sin normalizar: `"BOGOTA" != "Bogota"`. | Un trabajo válido puede quedar sin candidatos por diferencia de mayúsculas. Acordar la normalización |
 | 2 | El ciclo de `evt.trabajos` (§13) | Mitigado, no resuelto |
 | 3 | `monto` es `long` en el contrato: ¿unidades enteras o centavos? | Si son centavos, todo monto queda 100× |
 | 4 | `motor-reglas-partner` publica en `eventos-partner` y consume `comandos-partner`; el script de tópicos crea `evt.partners` y `cmd.partners` | **Los nombres no coinciden**: ese servicio no se comunica con nadie |
 | 5 | `emparejamiento-asignacion` y `acreditacion-habilitacion` están en el compose pero no existen en `servicios/` | `make servicios` falla |
+
+
+---
+
+## Integración verificada con Emparejamiento y Asignación
+
+El camino principal **cierra de punta a punta**, en coreografía pura y sin que
+ningún servicio llame a otro:
+
+```
+12:42:42,097  orquestacion-trabajos      CrearTrabajo -> TrabajoCreado
+12:42:42,205  emparejamiento-asignacion  reacciona, asigna PROV_ALFA -> TrabajoAsignado
+12:42:42,212  orquestacion-trabajos      consume el ajeno -> estado ASIGNADO
+```
+
+115 ms, el mismo `trabajo_id` en los tres pasos y el **mismo `correlation_id`**
+propagado a través de los dos servicios.
+
+Lo verificado en concreto:
+
+- Nuestro Avro es legible por Emparejamiento: lee `ciudad`, `mercado_id`,
+  `urgencia` y `sla_minutos` de nuestro `TrabajoCreado`.
+- Su `service_name` es `emparejamiento-asignacion`, así que nuestro filtro
+  anti-eco **no** lo descarta.
+- Él ignora `TrabajoAsignado` y `TrabajoRechazado` por tipo, así que tampoco
+  reacciona a su propio eco.
+- Las dos proyecciones de reglas de partner convergen al mismo estado leyendo el
+  mismo tópico compactado.
+
+Lo que **no** cierra es la rama de reasignación (`AsignarProveedor` sobre
+`cmd.emparejamiento`), por la deuda #1.

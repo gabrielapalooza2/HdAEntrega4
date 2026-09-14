@@ -16,9 +16,25 @@ logger = logging.getLogger(__name__)
 def manejar_regla_actualizada(sobre: c.Sobre) -> None:
     """Aplica una regla de partner a la proyeccion local.
 
-    TODO ocurre en UNA SOLA TRANSACCION: la marca de idempotencia y el upsert de
-    la proyeccion. Si el upsert fallara, la marca se va con el rollback y el
-    mensaje se reprocesa en la siguiente entrega.
+    ─── POR QUE AQUI NO SE USA mensajes_procesados ───────────────────────
+    Los demas manejadores marcan el sobre contra mensajes_procesados. Este NO,
+    y es una decision, no un olvido.
+
+    La marca por id de mensaje protege EFECTOS QUE NO SON IDEMPOTENTES POR SI
+    MISMOS: crear un trabajo dos veces crea dos trabajos. Pero esto es una
+    PROYECCION PURA con guarda de version: aplicar la misma regla dos veces da
+    exactamente el mismo resultado, porque la guarda convierte la repeticion en
+    un no-op. La marca no agregaria ninguna seguridad.
+
+    Y si haria daño. evt.partners esta COMPACTADO precisamente para que una
+    replica nueva, o una base restaurada, pueda RECONSTRUIR la proyeccion
+    releyendo el topico desde el inicio. Con la marca puesta, ese replay se
+    descartaria entero como "ya procesado" y la proyeccion quedaria vacia: la
+    idempotencia habria bloqueado la reconstruccion.
+
+    En resumen: idempotencia por VERSION donde el estado converge; idempotencia
+    por ID DE MENSAJE solo donde el efecto no es repetible.
+    ───────────────────────────────────────────────────────────────────────
     """
     mensaje: c.ReglaDePartnerActualizada = sobre.contenido()
 
@@ -34,16 +50,13 @@ def manejar_regla_actualizada(sobre: c.Sobre) -> None:
 
     with bd.pool().connection() as con:
         with con.cursor() as cur:
-            if not bd.reclamar_mensaje(cur, sobre.id):
-                logger.info("Regla %s v%s: sobre %s repetido, se descarta",
-                            regla.partner_id, regla.regla_version, sobre.id)
-                return
-
             if reglas.guardar(cur, regla):
                 logger.info("Regla aplicada: partner=%s v=%s sla=%smin cubre=%s",
                             regla.partner_id, regla.regla_version,
                             regla.sla_minutos, list(regla.categorias_cubiertas))
             else:
                 # No es un fallo: es la guarda de version haciendo su trabajo.
-                logger.info("Regla %s v%s descartada por ser mas vieja que la "
+                # Cubre tanto la reentrega del mismo mensaje como la llegada
+                # tardia de una version vieja.
+                logger.info("Regla %s v%s sin efecto: no es mas nueva que la "
                             "aplicada", regla.partner_id, regla.regla_version)

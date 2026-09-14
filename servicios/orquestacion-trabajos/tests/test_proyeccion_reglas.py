@@ -44,15 +44,51 @@ def test_una_regla_aterriza_en_la_proyeccion(limpia):
 
 def test_el_mismo_sobre_dos_veces_no_hace_nada_la_segunda(limpia):
     """REPETICION. Pulsar entrega al menos una vez: recibir duplicados es
-    normal, no excepcional."""
+    normal, no excepcional.
+
+    Aqui la repeticion la absorbe la GUARDA DE VERSION, no mensajes_procesados:
+    la segunda copia trae la misma version, no es mayor, y el upsert no hace
+    nada. Ver el docstring de manejar_regla_actualizada.
+    """
     sobre = _sobre(version=1, sla=120)
     aplicacion.manejar_regla_actualizada(sobre)
     aplicacion.manejar_regla_actualizada(sobre)   # MISMO sobre.id
 
+    assert _leer(limpia).sla_minutos == 120
+    assert _leer(limpia).regla_version == 1
+
+    # Este manejador NO marca sobres: hacerlo impediria reconstruir la
+    # proyeccion releyendo el topico compactado.
     with limpia.pool().connection() as con, con.cursor() as cur:
         cur.execute("SELECT count(*) FROM mensajes_procesados")
-        assert cur.fetchone()[0] == 1
-    assert _leer(limpia).sla_minutos == 120
+        assert cur.fetchone()[0] == 0
+
+
+def test_la_proyeccion_se_reconstruye_releyendo_los_mismos_mensajes(limpia):
+    """LA RAZON DE QUE evt.partners ESTE COMPACTADO.
+
+    Se simula perder la base y volver a aplicar los MISMOS sobres, como haria
+    una replica nueva leyendo el topico desde el inicio. La proyeccion tiene que
+    quedar igual.
+
+    Si este manejador marcara los sobres contra mensajes_procesados, el replay
+    se descartaria entero y la proyeccion quedaria vacia.
+    """
+    sobres = [_sobre(version=v, sla=v * 10) for v in (1, 2, 3)]
+    for s in sobres:
+        aplicacion.manejar_regla_actualizada(s)
+    antes = _leer(limpia)
+
+    # se pierde la base
+    with limpia.pool().connection() as con:
+        con.execute("TRUNCATE proyeccion_regla_partner")
+    assert _leer(limpia) is None
+
+    # se reprocesan LOS MISMOS sobres, con los MISMOS ids
+    for s in sobres:
+        aplicacion.manejar_regla_actualizada(s)
+
+    assert _leer(limpia) == antes
 
 
 def test_una_version_vieja_que_llega_tarde_no_hace_retroceder_el_estado(limpia):
@@ -66,12 +102,8 @@ def test_una_version_vieja_que_llega_tarde_no_hace_retroceder_el_estado(limpia):
     assert regla.regla_version == 5, "la v3 piso a la v5"
     assert regla.sla_minutos == 60
 
-    # Las dos se marcaron como procesadas: son mensajes distintos, y los dos
-    # SE PROCESARON. Que una no cambiara nada es la guarda de version, no la
-    # marca de idempotencia.
-    with limpia.pool().connection() as con, con.cursor() as cur:
-        cur.execute("SELECT count(*) FROM mensajes_procesados")
-        assert cur.fetchone()[0] == 2
+    # Los dos mensajes SE PROCESARON; lo que impidio que la v3 pisara a la v5
+    # fue la guarda de version.
 
 
 def test_aplicar_versiones_en_cualquier_orden_converge(limpia):
