@@ -21,7 +21,7 @@ from .dto import Outbox
 
 logger = logging.getLogger(__name__)
 
-TOPICO_EVENTOS_PARTNER = "persistent://hda/poc/eventos-partner"
+TOPICO_EVENTOS_PARTNER = "persistent://hda/poc/evt.partners"
 
 
 def registrar_en_outbox(tipo: str, clave: str, payload: dict, correlation_id: str,

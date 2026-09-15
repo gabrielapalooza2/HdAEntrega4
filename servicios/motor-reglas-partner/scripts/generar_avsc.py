@@ -26,12 +26,12 @@ from motor_reglas.modulos.partners.infraestructura.schema.v1.eventos import (
     EventoReglaDePartnerActualizada,
 )
 
-DESTINO = os.path.join(os.path.dirname(__file__), "..", "contratos")
+DESTINO = os.path.join(os.path.dirname(__file__), "..", "..", "..", "contratos", "esquemas")
 
 CLASES = {
-    "eventos-partner/ReglaDePartnerActualizada.avsc": EventoReglaDePartnerActualizada,
-    "comandos-partner/RegistrarPartner.avsc": ComandoRegistrarPartner,
-    "comandos-partner/ActualizarReglaDePartner.avsc": ComandoActualizarReglaDePartner,
+    "evt.partners/ReglaDePartnerActualizada.avsc": EventoReglaDePartnerActualizada,
+    "cmd.partners/RegistrarPartner.avsc": ComandoRegistrarPartner,
+    "cmd.partners/ActualizarReglaDePartner.avsc": ComandoActualizarReglaDePartner,
 }
 
 for ruta, clase in CLASES.items():

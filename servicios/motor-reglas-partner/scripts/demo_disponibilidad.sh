@@ -9,7 +9,7 @@ set -euo pipefail
 echo "== 1. Última regla conocida de cada partner, leída del tópico COMPACTADO =="
 echo "   (esto es lo que un consumidor reconstruye al arrancar en frío)"
 docker exec broker bin/pulsar-client consume \
-  persistent://hda/poc/eventos-partner -s chequeo-$RANDOM -p Earliest -n 10 2>/dev/null | grep -c "content" || true
+  persistent://hda/poc/evt.partners -s chequeo-$RANDOM -p Earliest -n 10 2>/dev/null | grep -c "content" || true
 
 echo
 echo "== 2. Apagando Motor reglas partner =="
@@ -19,7 +19,7 @@ docker ps --format '{{.Names}}' | grep -q motor-reglas-partner && echo "sigue ar
 echo
 echo "== 3. El tópico conserva el estado: un consumidor nuevo lo reconstruye igual =="
 docker exec broker bin/pulsar-client consume \
-  persistent://hda/poc/eventos-partner -s consumidor-frio-$RANDOM -p Earliest -n 5 2>/dev/null | tail -15
+  persistent://hda/poc/evt.partners -s consumidor-frio-$RANDOM -p Earliest -n 5 2>/dev/null | tail -15
 
 echo
 echo "   >> Aquí los servicios consumidores (Orquestación, Emparejamiento) deben"

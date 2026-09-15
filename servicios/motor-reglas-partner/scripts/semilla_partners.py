@@ -46,7 +46,7 @@ def registrar(api: str, i: int) -> str | None:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--cantidad", type=int, default=30)
-    p.add_argument("--api", default="http://localhost:5000")
+    p.add_argument("--api", default="http://localhost:5002")
     args = p.parse_args()
 
     creados = [pid for i in range(1, args.cantidad + 1) if (pid := registrar(args.api, i))]

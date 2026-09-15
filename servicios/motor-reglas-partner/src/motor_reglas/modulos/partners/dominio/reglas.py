@@ -1,10 +1,3 @@
-"""Invariantes de la agregación Partner.
-
-Cada regla es una clase con nombre. En la sustentación esto importa: un invariante
-con nombre se puede señalar en el código y explicar; un `if` dentro de un método
-hay que ir a buscarlo.
-"""
-
 from motor_reglas.seedwork.dominio.reglas import ReglaNegocio
 
 
@@ -27,12 +20,6 @@ class PartnerDebeTenerAlMenosUnaCategoria(ReglaNegocio):
 
 
 class ReglaDebePertenecerAlConvenioDelPartner(ReglaNegocio):
-    """Este es el invariante que justifica que Partner sea UNA agregación y no tres.
-
-    Una regla no puede existir sin el convenio que la respalda, y las dos cosas
-    tienen que quedar consistentes en la misma transacción. Ese es exactamente el
-    criterio de Evans para trazar una frontera transaccional.
-    """
 
     def __init__(self, partner, convenio_id, mensaje="La regla debe pertenecer al convenio vigente del partner"):
         super().__init__(mensaje)

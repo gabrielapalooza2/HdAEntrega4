@@ -9,7 +9,7 @@ un evento climatico. Incorporar un partner, en cambio, ocurre unas treinta veces
 en la historia de la empresa: inyectar partners a 200 por segundo no mide nada
 del negocio y seria la "mala experimentacion" contra la que advierte el enunciado.
 
-Por eso este script publica el comando CrearTrabajo en `comandos-trabajos`, que es
+Por eso este script publica el comando CrearTrabajo en `cmd.trabajos`, que es
 la entrada del servicio Orquestacion de trabajos.
 
 QUE PAPEL JUEGA MOTOR REGLAS PARTNER EN ESTE ESCENARIO
@@ -19,14 +19,14 @@ con CARGA DE ESTADO y los consumidores guardan una proyeccion local, este servic
 NO aparece en el flujo de los 36.000 trabajos diarios. Si en lugar de eso
 Orquestacion tuviera que consultarlo por cada trabajo, seria el cuello de botella
 del sistema entero. La medida de este escenario incluye comprobar precisamente eso:
-el backlog de `comandos-partner` permanece en cero mientras `comandos-trabajos`
+el backlog de `cmd.partners` permanece en cero mientras `cmd.trabajos`
 absorbe el pico.
 
 USO
 ---
     python scripts/semilla_partners.py --cantidad 30     # una sola vez
     python scripts/carga_escalabilidad.py --rps 10 50 200 --segundos 30
-    docker exec broker bin/pulsar-admin topics stats persistent://hda/poc/comandos-trabajos
+    docker exec broker bin/pulsar-admin topics stats persistent://hda/poc/cmd.trabajos
 """
 import argparse
 import os
@@ -42,8 +42,8 @@ from pulsar.schema import AvroSchema, Array, Integer, Long, Record, String
 
 from motor_reglas.seedwork.infraestructura.utils import broker_url, time_millis
 
-TOPICO_TRABAJOS = "persistent://hda/poc/comandos-trabajos"
-TOPICO_PARTNERS = "persistent://hda/poc/comandos-partner"
+TOPICO_TRABAJOS = "persistent://hda/poc/cmd.trabajos"
+TOPICO_PARTNERS = "persistent://hda/poc/cmd.partners"
 
 CATEGORIAS = ["PLOMERIA", "ELECTRICIDAD", "CARPINTERIA", "PINTURA", "CERRAJERIA"]
 URGENCIAS = ["PROGRAMADA", "ALTA", "EMERGENCIA"]
@@ -123,7 +123,7 @@ def main():
     p.add_argument("--rps", type=int, nargs="+", default=[10, 50, 200],
                    help="rampa de trabajos por segundo")
     p.add_argument("--segundos", type=int, default=30)
-    p.add_argument("--api", default=os.getenv("API", "http://localhost:5000"))
+    p.add_argument("--api", default=os.getenv("API", "http://localhost:5002"))
     args = p.parse_args()
 
     partner_ids = leer_partners(args.api)

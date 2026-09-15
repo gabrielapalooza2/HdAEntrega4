@@ -12,7 +12,7 @@
 # prueba modificabilidad. Lo que la prueba es que el trabajo del partner nuevo
 # obtiene su SLA y su red homologada SIN QUE NADIE HAYA DESPLEGADO DOMINIO.
 set -euo pipefail
-API="${API:-http://localhost:5000}"
+API="${API:-http://localhost:5002}"
 
 hr() { printf '\n%s\n' "------------------------------------------------------------"; }
 
@@ -46,14 +46,14 @@ echo "   >> NO se creo ningun trabajo. Solo se configuro con quien trabajamos."
 
 hr
 echo "   La regla quedo como DATO en la base de datos:"
-docker exec partners-db psql -U partners -d partners -t -c \
+docker exec db-partners psql -U partners -d partners -t -c \
   "SELECT nombre, regla_version, sla_minutos, cobertura, red_homologada FROM partners WHERE id='$PARTNER_ID';" \
   2>/dev/null || curl -sS "$API/partners/$PARTNER_ID" | python3 -m json.tool
 
 hr
 echo "   Y viajo al bus con CARGA DE ESTADO (la regla completa, no un aviso):"
 docker exec broker bin/pulsar-client consume \
-  persistent://hda/poc/eventos-partner -s demo-esc6-$RANDOM -p Earliest -n 1 2>/dev/null | tail -12
+  persistent://hda/poc/evt.partners -s demo-esc6-$RANDOM -p Earliest -n 1 2>/dev/null | tail -12
 
 hr
 echo "FASE 2 (operativa) - llega un trabajo DEL partner 31"
@@ -76,7 +76,7 @@ else
   sleep 3
   echo "   Eventos resultantes:"
   docker exec broker bin/pulsar-client consume \
-    persistent://hda/poc/eventos-trabajos -s demo-esc6-t-$RANDOM -p Earliest -n 2 2>/dev/null | tail -20
+    persistent://hda/poc/evt.trabajos -s demo-esc6-t-$RANDOM -p Earliest -n 2 2>/dev/null | tail -20
 fi
 
 hr
