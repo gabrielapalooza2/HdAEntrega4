@@ -10,7 +10,7 @@ log = logging.getLogger("emparejamiento.pulsar_admin")
 
 TENANT = "hda"
 NAMESPACE = "hda/poc"
-CLUSTER = "standalone"
+CLUSTER = "cluster-a"
 
 
 def esperar_admin(admin_url: str, intentos: int = 60, pausa: float = 2.0) -> None:

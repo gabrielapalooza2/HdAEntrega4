@@ -8,6 +8,7 @@ import pulsar
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from infraestructura.http.demo import DemoBus, montar_demo
 from infraestructura.mensajeria.avro_codec import cargar_avsc
 from infraestructura.mensajeria.pulsar_io import (
     TOPIC_ASIGNACIONES,
@@ -97,6 +98,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
                 "asignacion": asignacion,
                 "fabrica_uow": fabrica_uow,
                 "engine": engine,
+                "demo_bus": DemoBus(client, contratos),
             }
         )
         log.info("emparejamiento-asignacion listo")
@@ -148,6 +150,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
             "time": asignacion.ocurrido_en,
         }
 
+    app.include_router(montar_demo(estado))
     return app
 
 
