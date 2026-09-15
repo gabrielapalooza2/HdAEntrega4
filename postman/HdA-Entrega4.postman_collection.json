@@ -11,6 +11,7 @@
     { "key": "pulsar_admin", "value": "http://localhost:8080" },
     { "key": "trabajo_id", "value": "" },
     { "key": "partner_id", "value": "partner-31" },
+    { "key": "motor_partner_id", "value": "" },
     { "key": "asignacion_id", "value": "" },
     { "key": "proveedor_id", "value": "" },
     { "key": "correlation_id", "value": "" }
@@ -299,6 +300,7 @@
     },
     {
       "name": "Motor reglas partner",
+      "description": "El id del motor es un UUID (POST /partners → body.id). No reutilices partner-31: esa clave es del flujo de emparejamiento. Orden: Listar o POST, luego PUT.",
       "item": [
         {
           "name": "Listar partners",
@@ -309,7 +311,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('es lista', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                  "const arr = pm.response.json();",
+                  "pm.test('es lista', () => pm.expect(arr).to.be.an('array'));",
+                  "if (Array.isArray(arr) && arr.length && arr[arr.length - 1].id) {",
+                  "  pm.collectionVariables.set('motor_partner_id', arr[arr.length - 1].id);",
+                  "  if (pm.environment && pm.environment.name) pm.environment.set('motor_partner_id', arr[arr.length - 1].id);",
+                  "}"
                 ]
               }
             }
@@ -330,7 +337,11 @@
                 "exec": [
                   "pm.test('status 202', () => pm.response.to.have.status(202));",
                   "const b = pm.response.json();",
-                  "if (b.id) pm.collectionVariables.set('partner_id', b.id);"
+                  "pm.test('devuelve UUID', () => pm.expect(b.id).to.match(/^[0-9a-f-]{36}$/i));",
+                  "if (b.id) {",
+                  "  pm.collectionVariables.set('motor_partner_id', b.id);",
+                  "  if (pm.environment && pm.environment.name) pm.environment.set('motor_partner_id', b.id);",
+                  "}"
                 ]
               }
             }
@@ -348,8 +359,42 @@
           }
         },
         {
+          "name": "GET partner por UUID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('mismo id', () => pm.expect(b.id).to.eql(pm.collectionVariables.get('motor_partner_id') || pm.environment.get('motor_partner_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{motor_url}}/partners/{{motor_partner_id}}",
+            "description": "Consulta el partner recién registrado. Requiere motor_partner_id (UUID)."
+          }
+        },
+        {
           "name": "PUT actualizar regla (202)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('motor_partner_id') || (pm.environment && pm.environment.get('motor_partner_id')) || '';",
+                  "if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {",
+                  "  throw new Error('Ejecuta primero POST registrar partner. El PUT usa motor_partner_id (UUID), no partner-31.');",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -367,7 +412,8 @@
               "mode": "raw",
               "raw": "{\n  \"cobertura_contratada\": [\"PLOMERIA\", \"ELECTRICIDAD\"],\n  \"sla_minutos\": 90,\n  \"monto_maximo_sin_aprobacion\": { \"monto\": 40000000, \"moneda\": \"COP\" },\n  \"red_homologada\": [\"prov-a\"]\n}"
             },
-            "url": "{{motor_url}}/partners/{{partner_id}}/regla"
+            "url": "{{motor_url}}/partners/{{motor_partner_id}}/regla",
+            "description": "Usa el UUID de POST /partners (variable motor_partner_id). No uses partner-31: ese id es del flujo de emparejamiento, no del agregado del motor."
           }
         }
       ]

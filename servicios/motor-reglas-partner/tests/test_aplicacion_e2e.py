@@ -74,5 +74,30 @@ def test_actualizar_regla_sube_version_y_encola_otro_evento(app):
         assert db.session.query(Outbox).count() == 2
 
 
+def test_actualizar_regla_con_id_no_uuid_devuelve_400(app):
+    """Postman deja partner_id=partner-31 (id de demo, no UUID). No debe ser 500."""
+    cliente = app.test_client()
+    r = cliente.put("/partners/partner-31/regla", json={
+        "cobertura_contratada": ["PLOMERIA"],
+        "sla_minutos": 90,
+        "monto_maximo_sin_aprobacion": {"monto": 40000000, "moneda": "COP"},
+        "red_homologada": ["prov-a"],
+    })
+    assert r.status_code == 400
+    cuerpo = r.get_json()
+    assert "error" in cuerpo
+    assert "UUID" in cuerpo["error"] or "uuid" in cuerpo["error"].lower()
+
+
+def test_actualizar_regla_inexistente_devuelve_404(app):
+    cliente = app.test_client()
+    r = cliente.put("/partners/00000000-0000-0000-0000-000000000000/regla", json={
+        "cobertura_contratada": ["PLOMERIA"],
+        "sla_minutos": 90,
+        "monto_maximo_sin_aprobacion": {"monto": 1, "moneda": "COP"},
+    })
+    assert r.status_code == 404
+
+
 def test_health(app):
     assert app.test_client().get("/health").status_code == 200
