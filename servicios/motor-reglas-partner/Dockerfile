@@ -10,6 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 ENV PYTHONPATH=/app/src
 
 EXPOSE 5000

@@ -1,0 +1,486 @@
+{
+  "info": {
+    "_postman_id": "a8c4e1d0-4f2b-4b7a-9c11-hdaentrega40002",
+    "name": "HdA Entrega 4 — POC",
+    "description": "Pruebas HTTP de la POC (Entrega 4).\n\n**Para el video:** Collection Runner → carpeta **Flujo completo** → Run (delay 0).\n\nLos POST `/demo/flujo/*` NO son API de negocio ni llamadas entre microservicios. Simulan a Orquestación / Acreditación (ausentes en este repo) publicando Avro en Pulsar. La query real es `GET /asignaciones/{trabajo_id}`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "emparejamiento_url", "value": "http://localhost:8000" },
+    { "key": "motor_url", "value": "http://localhost:5002" },
+    { "key": "pulsar_admin", "value": "http://localhost:8080" },
+    { "key": "trabajo_id", "value": "" },
+    { "key": "partner_id", "value": "partner-31" },
+    { "key": "motor_partner_id", "value": "" },
+    { "key": "asignacion_id", "value": "" },
+    { "key": "proveedor_id", "value": "" },
+    { "key": "correlation_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Flujo completo (emparejamiento + asignación + rechazo)",
+      "description": "Orden fijo. Cada POST espera en el servidor a que Pulsar hidrate / asigne / rechace.",
+      "item": [
+        {
+          "name": "1. Health — proyecciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('servicio arriba', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('status ok', () => pm.expect(b.status).to.eql('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/health",
+            "description": "Si responde 503, el contenedor aún está arrancando."
+          }
+        },
+        {
+          "name": "2. Carga de estado (regla + habilitaciones)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('preparar ok', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('proyecciones hidratadas', () => {",
+                  "  pm.expect(b.ok).to.be.true;",
+                  "  pm.expect(b.proyecciones.reglas).to.be.at.least(1);",
+                  "  pm.expect(b.proyecciones.habilitaciones).to.be.at.least(2);",
+                  "});",
+                  "if (b.partner_id) pm.collectionVariables.set('partner_id', b.partner_id);",
+                  "if (b.correlation_id) pm.collectionVariables.set('correlation_id', b.correlation_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{emparejamiento_url}}/demo/flujo/preparar",
+            "description": "Simula Motor + Acreditación: evt.partners y evt.proveedores. Espera a que las proyecciones locales existan."
+          }
+        },
+        {
+          "name": "3. Publicar TrabajoCreado (matching → ASIGNADO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('trabajo creado y asignado', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('evento TrabajoCreado', () => pm.expect(b.evento).to.eql('TrabajoCreado'));",
+                  "pm.test('eligió prov-a', () => pm.expect(b.asignacion.proveedor_id).to.eql('prov-a'));",
+                  "pm.test('estado ASIGNADO', () => pm.expect(b.asignacion.estado).to.eql('ASIGNADO'));",
+                  "pm.test('proyección local', () => pm.expect(b.asignacion.origen_habilitacion).to.eql('PROYECCION_LOCAL'));",
+                  "pm.collectionVariables.set('trabajo_id', b.trabajo_id);",
+                  "pm.collectionVariables.set('correlation_id', b.correlation_id);",
+                  "pm.collectionVariables.set('asignacion_id', b.asignacion.asignacion_id);",
+                  "pm.collectionVariables.set('proveedor_id', b.asignacion.proveedor_id);",
+                  "pm.collectionVariables.set('partner_id', b.partner_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{emparejamiento_url}}/demo/flujo/trabajo-creado",
+            "description": "Simula Orquestación. Publica TrabajoCreado y espera a que Emparejamiento persista ASIGNADO y publique TrabajoAsignado."
+          }
+        },
+        {
+          "name": "4. GET asignación (debe ser ASIGNADO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('query 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('mismo trabajo', () => pm.expect(b.trabajo_id).to.eql(pm.variables.get('trabajo_id')));",
+                  "pm.test('estado ASIGNADO', () => pm.expect(b.estado).to.eql('ASIGNADO'));",
+                  "pm.test('proveedor prov-a', () => pm.expect(b.proveedor_id).to.eql('prov-a'));",
+                  "pm.test('origen PROYECCION_LOCAL', () => pm.expect(b.origen_habilitacion).to.eql('PROYECCION_LOCAL'));",
+                  "pm.test('tiene correlation_id', () => pm.expect(b.correlation_id).to.be.ok);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/asignaciones/{{trabajo_id}}",
+            "description": "Query síncrona permitida por la rúbrica. Esto es lo que debes mostrar en cámara."
+          }
+        },
+        {
+          "name": "5. Publicar rechazo de habilitación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rechazo ok', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('evento de compensación', () => pm.expect(b.evento).to.eql('AsignacionRechazadaPorHabilitacion'));",
+                  "pm.test('estado RECHAZADO', () => pm.expect(b.asignacion.estado).to.eql('RECHAZADO'));",
+                  "pm.test('misma fila', () => pm.expect(b.asignacion.asignacion_id).to.eql(pm.variables.get('asignacion_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"trabajo_id\": \"{{trabajo_id}}\",\n  \"asignacion_id\": \"{{asignacion_id}}\",\n  \"proveedor_id\": \"{{proveedor_id}}\",\n  \"correlation_id\": \"{{correlation_id}}\",\n  \"motivo\": \"demo rechazo\"\n}"
+            },
+            "url": "{{emparejamiento_url}}/demo/flujo/rechazo",
+            "description": "Simula Acreditación. Compensación E4: RECHAZADO, sin reasignar."
+          }
+        },
+        {
+          "name": "6. GET asignación (debe ser RECHAZADO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('query 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('estado RECHAZADO', () => pm.expect(b.estado).to.eql('RECHAZADO'));",
+                  "pm.test('no cambió de fila', () => pm.expect(b.asignacion_id).to.eql(pm.variables.get('asignacion_id')));",
+                  "pm.test('sigue siendo prov-a', () => pm.expect(b.proveedor_id).to.eql('prov-a'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/asignaciones/{{trabajo_id}}",
+            "description": "Misma query: el estado cambió por el evento de compensación, no por un POST de negocio."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Salud",
+      "item": [
+        {
+          "name": "Health emparejamiento (proyecciones)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('status ok', () => pm.expect(b.status).to.eql('ok'));",
+                  "pm.test('hay reglas proyectadas', () => pm.expect(b.proyecciones.reglas).to.be.at.least(1));",
+                  "pm.test('hay habilitaciones proyectadas', () => pm.expect(b.proyecciones.habilitaciones).to.be.at.least(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/health"
+          }
+        },
+        {
+          "name": "Health emparejamiento (texto)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cuerpo ok', () => pm.expect(pm.response.text()).to.eql('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/health/ok"
+          }
+        },
+        {
+          "name": "Health motor reglas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('servicio motor', () => pm.expect(b.servicio).to.eql('motor-reglas-partner'));",
+                  "pm.test('estado ok', () => pm.expect(b.estado).to.eql('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{motor_url}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultas sueltas",
+      "item": [
+        {
+          "name": "GET Asignación por trabajo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('tiene asignacion_id', () => pm.expect(b.asignacion_id).to.be.ok);",
+                  "pm.test('origen proyección local', () => pm.expect(b.origen_habilitacion).to.eql('PROYECCION_LOCAL'));",
+                  "pm.test('estado ASIGNADO o RECHAZADO', () => pm.expect(b.estado).to.be.oneOf(['ASIGNADO', 'RECHAZADO']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/asignaciones/{{trabajo_id}}"
+          }
+        },
+        {
+          "name": "GET Asignación inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{emparejamiento_url}}/asignaciones/00000000-0000-0000-0000-000000000000"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Motor reglas partner",
+      "description": "El id del motor es un UUID (POST /partners → body.id). No reutilices partner-31: esa clave es del flujo de emparejamiento. Orden: Listar o POST, luego PUT.",
+      "item": [
+        {
+          "name": "Listar partners",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const arr = pm.response.json();",
+                  "pm.test('es lista', () => pm.expect(arr).to.be.an('array'));",
+                  "if (Array.isArray(arr) && arr.length && arr[arr.length - 1].id) {",
+                  "  pm.collectionVariables.set('motor_partner_id', arr[arr.length - 1].id);",
+                  "  if (pm.environment && pm.environment.name) pm.environment.set('motor_partner_id', arr[arr.length - 1].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{motor_url}}/partners"
+          }
+        },
+        {
+          "name": "POST registrar partner (202)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test('devuelve UUID', () => pm.expect(b.id).to.match(/^[0-9a-f-]{36}$/i));",
+                  "if (b.id) {",
+                  "  pm.collectionVariables.set('motor_partner_id', b.id);",
+                  "  if (pm.environment && pm.environment.name) pm.environment.set('motor_partner_id', b.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Partner Postman Demo\",\n  \"tipo_partner\": \"ASEGURADORA\",\n  \"convenio_numero\": \"CONV-VIDEO-001\",\n  \"vigencia_desde\": \"2026-01-01T00:00:00Z\",\n  \"porcentaje_comision\": 12.5,\n  \"regla\": {\n    \"cobertura_contratada\": [\"PLOMERIA\", \"ELECTRICIDAD\"],\n    \"sla_minutos\": 120,\n    \"monto_maximo_sin_aprobacion\": { \"monto\": 50000000, \"moneda\": \"COP\" },\n    \"pasos_de_aprobacion\": [\"ANALISTA_SINIESTROS\"],\n    \"red_homologada\": [\"prov-a\", \"prov-b\"]\n  }\n}"
+            },
+            "url": "{{motor_url}}/partners"
+          }
+        },
+        {
+          "name": "GET partner por UUID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('mismo id', () => pm.expect(b.id).to.eql(pm.collectionVariables.get('motor_partner_id') || pm.environment.get('motor_partner_id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{motor_url}}/partners/{{motor_partner_id}}",
+            "description": "Consulta el partner recién registrado. Requiere motor_partner_id (UUID)."
+          }
+        },
+        {
+          "name": "PUT actualizar regla (202)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.collectionVariables.get('motor_partner_id') || (pm.environment && pm.environment.get('motor_partner_id')) || '';",
+                  "if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {",
+                  "  throw new Error('Ejecuta primero POST registrar partner. El PUT usa motor_partner_id (UUID), no partner-31.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cobertura_contratada\": [\"PLOMERIA\", \"ELECTRICIDAD\"],\n  \"sla_minutos\": 90,\n  \"monto_maximo_sin_aprobacion\": { \"monto\": 40000000, \"moneda\": \"COP\" },\n  \"red_homologada\": [\"prov-a\"]\n}"
+            },
+            "url": "{{motor_url}}/partners/{{motor_partner_id}}/regla",
+            "description": "Usa el UUID de POST /partners (variable motor_partner_id). No uses partner-31: ese id es del flujo de emparejamiento, no del agregado del motor."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pulsar (evidencia de cluster)",
+      "item": [
+        {
+          "name": "Health broker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{pulsar_admin}}/admin/v2/brokers/health"
+          }
+        },
+        {
+          "name": "Clusters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('incluye cluster-a', () => pm.expect(pm.response.json()).to.include('cluster-a'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{pulsar_admin}}/admin/v2/clusters"
+          }
+        },
+        {
+          "name": "Tópicos particionados hda/poc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = JSON.stringify(pm.response.json());",
+                  "pm.test('evt.trabajos', () => pm.expect(s).to.include('evt.trabajos'));",
+                  "pm.test('evt.asignaciones', () => pm.expect(s).to.include('evt.asignaciones'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{pulsar_admin}}/admin/v2/persistent/hda/poc/partitioned"
+          }
+        }
+      ]
+    }
+  ]
+}

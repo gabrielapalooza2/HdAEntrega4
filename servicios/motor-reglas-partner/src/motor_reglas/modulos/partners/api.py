@@ -19,6 +19,7 @@ from motor_reglas.seedwork.aplicacion.queries import ejecutar_query
 from .aplicacion.comandos.actualizar_regla import ActualizarReglaDePartner
 from .aplicacion.comandos.registrar_partner import RegistrarPartner
 from .aplicacion.queries.obtener_partner import ObtenerPartner, ObtenerPartners
+from .dominio.excepciones import PartnerIdInvalido, PartnerNoExiste
 
 bp = Blueprint("partners", __name__, url_prefix="/partners")
 
@@ -72,7 +73,12 @@ def actualizar_regla(partner_id):
         red_homologada=cuerpo.get("red_homologada", []),
         correlation_id=request.headers.get("X-Correlation-Id", str(uuid.uuid4())),
     )
-    version = ejecutar_comando(comando)
+    try:
+        version = ejecutar_comando(comando)
+    except PartnerIdInvalido as e:
+        return jsonify({"error": str(e)}), 400
+    except PartnerNoExiste as e:
+        return jsonify({"error": str(e)}), 404
     return jsonify({"id": partner_id, "version_regla": version}), 202
 
 

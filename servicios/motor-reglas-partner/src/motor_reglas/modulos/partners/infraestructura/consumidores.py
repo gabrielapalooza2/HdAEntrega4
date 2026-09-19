@@ -31,7 +31,7 @@ from .schema.v1.comandos import ComandoActualizarReglaDePartner, ComandoRegistra
 
 logger = logging.getLogger(__name__)
 
-TOPICO_COMANDOS_PARTNER = "persistent://hda/poc/comandos-partner"
+TOPICO_COMANDOS_PARTNER = "persistent://hda/poc/cmd.partners"
 
 
 def _ya_procesado(mensaje_id: str) -> bool:

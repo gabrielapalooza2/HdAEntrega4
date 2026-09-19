@@ -1,15 +1,3 @@
-"""Agregación Partner: entidades Convenio y ReglaDePartner.
-
-FRONTERA TRANSACCIONAL. Partner es la raíz; Convenio y ReglaDePartner solo se
-tocan a través de ella. La razón no es estética: una regla sin convenio vigente
-que la respalde es un estado inválido del negocio, y los dos tienen que quedar
-consistentes de inmediato. Eso es lo que define una agregación en Evans.
-
-Mercado es una agregación SEPARADA aunque el mismo servicio la posea: sus
-invariantes son independientes de los de Partner y no hay ninguna regla que exija
-que las dos queden consistentes en la misma transacción.
-"""
-
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -35,9 +23,6 @@ from .reglas import (
 
 @dataclass
 class Convenio(Entidad):
-    """El acuerdo comercial firmado. Entidad, no objeto valor: dos convenios con
-    los mismos términos siguen siendo convenios distintos."""
-
     numero: str = None
     vigencia: Vigencia = None
     tarifa: Tarifa = None
@@ -49,13 +34,6 @@ class Convenio(Entidad):
 
 @dataclass
 class ReglaDePartner(Entidad):
-    """LA PIEZA CENTRAL DEL ESCENARIO 6.
-
-    Todo lo que distingue a un partner de otro vive aquí, como DATO. Un partner
-    nuevo es una instancia más de esta entidad; nunca una rama nueva de código en
-    Orquestación de trabajos.
-    """
-
     version: int = 1
     cobertura: CoberturaContratada = None
     acuerdo: AcuerdoDeServicio = None
@@ -70,15 +48,12 @@ class ReglaDePartner(Entidad):
 
 @dataclass
 class Partner(AgregacionRaiz):
-    """Raíz de la agregación. Único punto de entrada."""
-
     nombre: str = None
     tipo: TipoPartner = None
     activo: bool = True
     convenio: Convenio = None
     regla: ReglaDePartner = None
 
-    # ---------- comportamiento de dominio ----------
 
     def firmar_convenio(self, convenio: Convenio):
         self.validar_regla(ConvenioDebeTenerVigenciaValida(convenio.vigencia))
@@ -86,12 +61,7 @@ class Partner(AgregacionRaiz):
         self.tocar()
 
     def definir_regla(self, regla: ReglaDePartner, convenio_id: uuid.UUID | str | None = None):
-        """Fija o reemplaza la regla de operación del partner.
 
-        Sube la versión y registra el evento de dominio. Nadie llama a esto desde
-        afuera de la agregación: la capa de aplicación habla con el Partner, no
-        con la ReglaDePartner.
-        """
         self.validar_regla(PartnerDebeTenerAlMenosUnaCategoria(regla.cobertura))
         self.validar_regla(
             ReglaDebePertenecerAlConvenioDelPartner(self, convenio_id or (self.convenio.id if self.convenio else None))
@@ -111,12 +81,7 @@ class Partner(AgregacionRaiz):
         )
 
     def dar_de_baja(self, motivo: str):
-        """No se borra: se publica con activo=False.
 
-        Borrar el registro dejaría a los consumidores con una regla obsoleta para
-        siempre, porque en un tópico compactado la ausencia de mensaje no borra
-        nada. La baja tiene que viajar como un mensaje más.
-        """
         self.activo = False
         self.tocar()
         self.agregar_evento(PartnerDadoDeBaja(partner_id=str(self.id), motivo=motivo))
@@ -129,15 +94,9 @@ class Partner(AgregacionRaiz):
             )
         )
 
-    # ---------- consultas de dominio ----------
-
+ 
     def puede_solicitar(self, categoria: Categoria, momento: datetime | None = None) -> bool:
-        """La pregunta que Orquestación de trabajos responde leyendo su proyección.
 
-        Si esta lógica no existiera aquí, viviría como un condicional por
-        identificador de partner dentro del motor de gestión de trabajos. Ese
-        traslado es, literalmente, el escenario 6.
-        """
         if not self.activo or self.regla is None:
             return False
         if self.convenio is None or not self.convenio.esta_vigente(momento):

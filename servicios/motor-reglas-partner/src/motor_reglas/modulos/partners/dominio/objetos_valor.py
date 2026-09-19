@@ -1,9 +1,3 @@
-"""Objetos valor de la agregación Partner.
-
-Son los mismos que declaramos en la vista de información de la Entrega 2:
-TipoPartner, Vigencia, CoberturaContratada, Tarifa y AcuerdoDeServicio.
-"""
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -43,11 +37,7 @@ class Vigencia(ObjetoValor):
 
 @dataclass(frozen=True)
 class CoberturaContratada(ObjetoValor):
-    """Categorías que este partner puede solicitar.
 
-    Es la pieza que convierte 'este partner solo puede pedir plomería' de un
-    condicional en el motor a un dato consultable.
-    """
 
     categorias: tuple[Categoria, ...] = field(default_factory=tuple)
 
@@ -67,7 +57,7 @@ class Tarifa(ObjetoValor):
 
 @dataclass(frozen=True)
 class AcuerdoDeServicio(ObjetoValor):
-    """El SLA pactado con el partner, más los límites operativos que lo acompañan."""
+
 
     sla_minutos: int
     monto_maximo_sin_aprobacion: Dinero
@@ -83,7 +73,6 @@ class AcuerdoDeServicio(ObjetoValor):
 
 @dataclass(frozen=True)
 class RedHomologada(ObjetoValor):
-    """Proveedores que este partner acepta. Vacía significa sin restricción."""
 
     proveedores: tuple[str, ...] = field(default_factory=tuple)
 

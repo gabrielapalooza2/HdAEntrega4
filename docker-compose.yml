@@ -75,7 +75,7 @@ services:
       - managedLedgerDefaultWriteQuorum=1
       - managedLedgerDefaultAckQuorum=1
       - advertisedAddress=broker
-      - advertisedListeners=external:pulsar://127.0.0.1:6650
+      - advertisedListeners=internal:pulsar://broker:6650,external:pulsar://127.0.0.1:6650
       - brokerServiceCompactionThresholdInBytes=10485760
     depends_on:
       zookeeper: {condition: service_healthy}
