@@ -1,4 +1,4 @@
-.PHONY: infra topicos servicios todo abajo limpiar logs estado pruebas demo-modificabilidad demo-disponibilidad demo-escalabilidad
+.PHONY: infra topicos servicios todo abajo limpiar logs estado pruebas demo-modificabilidad demo-disponibilidad demo-escalabilidad demo-saga
 
 infra:            ## Pulsar (cluster) + las 4 bases de datos
 	docker compose up -d zookeeper pulsar-init bookie broker \
@@ -46,3 +46,6 @@ demo-escalabilidad:
 	docker exec broker bin/pulsar-admin topics stats persistent://hda/poc/cmd.trabajos
 	@echo "--- el flujo administrativo NO se movió: esa es la decisión de diseño ---"
 	docker exec broker bin/pulsar-admin topics stats persistent://hda/poc/cmd.partners
+
+demo-saga:
+	./scripts/demo_saga.sh
