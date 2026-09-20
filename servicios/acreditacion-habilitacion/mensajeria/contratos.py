@@ -23,7 +23,11 @@ from datetime import datetime, timezone
 
 import fastavro
 
-from dominio.eventos import AsignacionRechazadaPorHabilitacion, EstadoDeHabilitacionCambiado
+from dominio.eventos import (
+    AsignacionConfirmadaPorHabilitacion,
+    AsignacionRechazadaPorHabilitacion,
+    EstadoDeHabilitacionCambiado,
+)
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "acreditacion-habilitacion")
 CONTRATOS_DIR = os.getenv("CONTRATOS_DIR", "/app/contratos")
@@ -36,7 +40,8 @@ _RUTAS_SCHEMA = {
     "SuspenderProveedor": "esquemas/cmd.proveedores/SuspenderProveedor.avsc",
     "TrabajoAsignado": "esquemas/evt.trabajos/TrabajoAsignado.avsc",
     "EstadoDeHabilitacionCambiado": "esquemas/evt.proveedores/EstadoDeHabilitacionCambiado.avsc",
-    "AsignacionRechazadaPorHabilitacion": "esquemas/evt.habilitaciones/AsignacionRechazadaPorHabilitacion.avsc",
+    "AsignacionRechazadaPorHabilitacion": "esquemas/evt.asignaciones/AsignacionRechazadaPorHabilitacion.avsc",
+    "AsignacionConfirmadaPorHabilitacion": "esquemas/evt.asignaciones/AsignacionConfirmadaPorHabilitacion.avsc",
 }
 
 _cache_schemas: dict[str, dict] = {}
@@ -82,6 +87,13 @@ def codificar_evento(evento, correlation_id: str) -> tuple[bytes, dict]:
             "proveedor_id": evento.proveedor_id, "estado_real": evento.estado_real,
             "motivo": evento.motivo, "verificado_en": _epoch_millis(evento.verificado_en),
         }
+    elif isinstance(evento, AsignacionConfirmadaPorHabilitacion):
+        tipo = "AsignacionConfirmadaPorHabilitacion"
+        data = {
+            "trabajo_id": evento.trabajo_id, "asignacion_id": evento.asignacion_id,
+            "proveedor_id": evento.proveedor_id, "estado_real": evento.estado_real,
+            "verificado_en": _epoch_millis(evento.verificado_en),
+        }
     else:
         raise NotImplementedError(f"contratos.py no sabe codificar {type(evento).__name__}")
 
@@ -109,6 +121,42 @@ def codificar_evento(evento, correlation_id: str) -> tuple[bytes, dict]:
 # Tipos que este servicio sabe decodificar, agrupados por lo que consume.
 TIPOS_CMD_PROVEEDORES = {"AcreditarProveedor", "SuspenderProveedor"}
 TIPOS_EVT_TRABAJOS = {"TrabajoAsignado"}
+
+_ESQUEMA_SOBRE = fastavro.parse_schema({
+    "type": "record",
+    "name": "SobreComun",
+    "fields": [
+        {"name": "id", "type": ["null", "string"]},
+        {"name": "time", "type": ["null", "long"]},
+        {"name": "ingestion", "type": ["null", "long"]},
+        {"name": "specversion", "type": ["null", "string"]},
+        {"name": "type", "type": ["null", "string"]},
+        {"name": "datacontenttype", "type": ["null", "string"]},
+        {"name": "service_name", "type": ["null", "string"]},
+        {"name": "correlation_id", "type": ["null", "string"]},
+    ],
+})
+
+
+def tipo_del_sobre(payload: bytes) -> str | None:
+    """Lee el discriminador CloudEvents sin conocer el esquema del payload.
+
+    Emparejamiento publica TrabajoAsignado como bytes Avro y a veces sin
+    propiedad Pulsar `type`. Sin este peek el consumidor ackea y silencia
+    el paso que dispara la saga.
+    """
+    if not payload:
+        return None
+    if payload[:1] == b"{":
+        try:
+            return json.loads(payload.decode("utf-8")).get("type")
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            return None
+    try:
+        cabecera = fastavro.schemaless_reader(io.BytesIO(payload), _ESQUEMA_SOBRE)
+    except Exception:
+        return None
+    return (cabecera or {}).get("type")
 
 
 def decodificar(tipo: str, payload: bytes) -> dict:

@@ -1,15 +1,19 @@
 """Reaccion coreografiada a TrabajoAsignado (evt.trabajos, filtrado por type).
 
-TrabajoAsignadoPayload no trae categoria -- la verificacion aqui es solo
-habilitacion + vigencia contra el dato autoritativo (Proveedor.esta_disponible).
+Emparejamiento asigna contra su proyeccion local. Este servicio es el unico
+dueno del dato autoritativo: confirma o dispara la compensacion. Nadie le
+ordena el siguiente paso.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable
 
-from dominio.eventos import AsignacionRechazadaPorHabilitacion, EventoIntegracion
-from dominio.excepciones import ProveedorNoExiste
+from dominio.eventos import (
+    AsignacionConfirmadaPorHabilitacion,
+    AsignacionRechazadaPorHabilitacion,
+    EventoIntegracion,
+)
 from dominio.repositorios import RepositorioProveedores
 
 
@@ -28,14 +32,30 @@ def ejecutar(
 ) -> bool:
     proveedor = repositorio.obtener_por_id(comando.proveedor_id)
     if proveedor is None:
-        raise ProveedorNoExiste(comando.proveedor_id)
+        publicar_evento(AsignacionRechazadaPorHabilitacion(
+            trabajo_id=comando.trabajo_id,
+            asignacion_id=comando.asignacion_id,
+            proveedor_id=comando.proveedor_id,
+            estado_real="DESCONOCIDO",
+            motivo="PROVEEDOR_NO_EXISTE",
+        ))
+        session.commit()
+        return False
 
     disponible = proveedor.esta_disponible()
-
-    if not disponible:
+    if disponible:
+        publicar_evento(AsignacionConfirmadaPorHabilitacion(
+            trabajo_id=comando.trabajo_id,
+            asignacion_id=comando.asignacion_id,
+            proveedor_id=comando.proveedor_id,
+            estado_real=proveedor.estado.value,
+        ))
+    else:
         publicar_evento(AsignacionRechazadaPorHabilitacion(
-            trabajo_id=comando.trabajo_id, asignacion_id=comando.asignacion_id,
-            proveedor_id=comando.proveedor_id, estado_real=proveedor.estado.value,
+            trabajo_id=comando.trabajo_id,
+            asignacion_id=comando.asignacion_id,
+            proveedor_id=comando.proveedor_id,
+            estado_real=proveedor.estado.value,
             motivo=proveedor.motivo or f"Proveedor no habilitado (estado {proveedor.estado.value})",
         ))
 

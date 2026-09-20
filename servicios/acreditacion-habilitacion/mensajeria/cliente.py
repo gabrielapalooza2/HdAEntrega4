@@ -21,7 +21,7 @@ PULSAR_URL = os.getenv("PULSAR_URL", "pulsar://localhost:6650")
 TOPICO_CMD_PROVEEDORES = "persistent://hda/poc/cmd.proveedores"
 TOPICO_EVT_TRABAJOS = "persistent://hda/poc/evt.trabajos"
 TOPICO_EVT_PROVEEDORES = "persistent://hda/poc/evt.proveedores"
-TOPICO_EVT_HABILITACIONES = "persistent://hda/poc/evt.habilitaciones"
+TOPICO_EVT_ASIGNACIONES = "persistent://hda/poc/evt.asignaciones"
 
 SUSCRIPCION_CMD_PROVEEDORES = "acreditacion-cmd-proveedores"
 SUSCRIPCION_EVT_TRABAJOS = "acreditacion-evt-trabajos"
@@ -45,12 +45,17 @@ class Publicador:
         return self._productores[topico]
 
     def publicar(self, evento, correlation_id: str):
-        from dominio.eventos import AsignacionRechazadaPorHabilitacion, EstadoDeHabilitacionCambiado
+        from dominio.eventos import (
+            AsignacionConfirmadaPorHabilitacion,
+            AsignacionRechazadaPorHabilitacion,
+            EstadoDeHabilitacionCambiado,
+        )
 
         if isinstance(evento, EstadoDeHabilitacionCambiado):
             topico, clave = TOPICO_EVT_PROVEEDORES, evento.proveedor_id
-        elif isinstance(evento, AsignacionRechazadaPorHabilitacion):
-            topico, clave = TOPICO_EVT_HABILITACIONES, evento.trabajo_id
+        elif isinstance(evento, (AsignacionRechazadaPorHabilitacion,
+                                 AsignacionConfirmadaPorHabilitacion)):
+            topico, clave = TOPICO_EVT_ASIGNACIONES, evento.trabajo_id
         else:
             raise NotImplementedError(f"No se sabe a que topico publicar {type(evento).__name__}")
 

@@ -65,7 +65,7 @@ def _despachar_evento_trabajos(sobre: dict, session, publicar_evento):
 
 def _procesar_mensaje(msg: pulsar.Message, tipos_validos: set[str], despachar, publicador: Publicador) -> bool:
     propiedades = msg.properties() or {}
-    tipo = propiedades.get("type")
+    tipo = propiedades.get("type") or contratos.tipo_del_sobre(msg.data())
 
     if tipo not in tipos_validos:
         logger.debug("Ignorando type='%s' (fuera de interes de este consumidor)", tipo)
