@@ -198,3 +198,34 @@ def test_rechazo_marca_y_no_republica():
     ))
     assert r.asignacion.estado == EstadoAsignacion.RECHAZADO
     assert pub.eventos == []
+
+
+def test_confirmacion_marca_sin_republicar():
+    mem, pub = MemRepo(), PubMem()
+    a = Asignacion(
+        asignacion_id="a-1",
+        trabajo_id="t-1",
+        proveedor_id="prov-a",
+        partner_id="p-1",
+        correlacion_id="c-1",
+        sla_vence_en=1,
+        verificado_en=1,
+        ocurrido_en=1,
+        estado=EstadoAsignacion.ASIGNADO,
+    )
+    mem.guardar(a)
+    svc = ServicioAsignacion(lambda: MemUoW(mem), pub, RelojFijo())
+    r = svc.on_confirmacion_habilitacion(_ce(
+        "AsignacionConfirmadaPorHabilitacion",
+        {
+            "trabajo_id": "t-1",
+            "asignacion_id": "a-1",
+            "proveedor_id": "prov-a",
+            "estado_real": "HABILITADO",
+            "verificado_en": 9,
+        },
+        eid="ok-1",
+    ))
+    assert r.asignacion.estado == EstadoAsignacion.CONFIRMADO
+    assert r.asignacion.verificado_en == 9
+    assert pub.eventos == []

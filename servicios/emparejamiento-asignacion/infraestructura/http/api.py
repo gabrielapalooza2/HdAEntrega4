@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from infraestructura.http.demo import DemoBus, montar_demo
 from infraestructura.mensajeria.avro_codec import cargar_avsc
 from infraestructura.mensajeria.pulsar_io import (
-    TOPIC_ASIGNACIONES,
     TOPIC_PARTNERS,
     TOPIC_PROVEEDORES,
     ConsumidoresPulsar,
@@ -69,12 +68,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
             TOPIC_PROVEEDORES,
             cargar_avsc(contratos, "evt.proveedores", "EstadoDeHabilitacionCambiado"),
         )
-        registrar_esquema(
-            settings.pulsar_admin_url,
-            TOPIC_ASIGNACIONES,
-            cargar_avsc(contratos, "evt.asignaciones", "AsignacionRechazadaPorHabilitacion"),
-        )
-        # evt.trabajos es multi-tipo: no se fija un único Avro en el registry.
+        # evt.trabajos y evt.asignaciones son multi-tipo: no se fija un único Avro.
 
         client = pulsar.Client(settings.pulsar_url)
         publicador = PublicadorTrabajoAsignadoPulsar(client, avsc_asignado)
@@ -88,6 +82,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
             on_habilitacion=proyecciones.aplicar_habilitacion,
             on_trabajos=asignacion.on_evento_trabajos,
             on_rechazo=asignacion.on_rechazo_habilitacion,
+            on_confirmacion=asignacion.on_confirmacion_habilitacion,
         )
         consumidores.arrancar()
         estado.update(

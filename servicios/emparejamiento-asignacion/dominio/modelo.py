@@ -13,6 +13,7 @@ DATACONTENTTYPE = "AVRO"
 
 class EstadoAsignacion(str, Enum):
     ASIGNADO = "ASIGNADO"
+    CONFIRMADO = "CONFIRMADO"
     RECHAZADO = "RECHAZADO"
 
 
@@ -69,6 +70,11 @@ class Asignacion:
 
     def marcar_rechazado(self) -> None:
         self.estado = EstadoAsignacion.RECHAZADO
+
+    def marcar_confirmado(self, verificado_en: int | None = None) -> None:
+        self.estado = EstadoAsignacion.CONFIRMADO
+        if verificado_en:
+            self.verificado_en = verificado_en
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,7 @@ TIPO_TRABAJO_RECHAZADO = "TrabajoRechazado"
 TIPO_REGLA = "ReglaDePartnerActualizada"
 TIPO_HABILITACION = "EstadoDeHabilitacionCambiado"
 TIPO_RECHAZO = "AsignacionRechazadaPorHabilitacion"
+TIPO_CONFIRMACION = "AsignacionConfirmadaPorHabilitacion"
 TIPOS_TRABAJOS_IGNORAR = {TIPO_TRABAJO_ASIGNADO, TIPO_TRABAJO_RECHAZADO}
 
 FabricaUoW = Callable[[], UnidadDeTrabajo]
@@ -247,6 +248,40 @@ class ServicioAsignacion:
             uow.commit()
             log.info(
                 "asignacion_rechazada asignacion_id=%s trabajo_id=%s (sin reasignar)",
+                asignacion_id,
+                trabajo_id,
+            )
+            return ResultadoEmparejamiento(asignacion=asignacion)
+        except Exception:
+            uow.rollback()
+            raise
+
+    def on_confirmacion_habilitacion(self, payload: dict) -> ResultadoEmparejamiento:
+        if tipo_de(payload) != TIPO_CONFIRMACION:
+            return ResultadoEmparejamiento(
+                ignorado=True, motivo_ignorado=f"tipo filtrado: {tipo_de(payload)}"
+            )
+        _, data = descomponer(payload)
+        evento_id = id_de(payload)
+        asignacion_id = _str(data.get("asignacion_id"))
+        trabajo_id = _str(data.get("trabajo_id"))
+        uow = self._fabrica()
+        try:
+            if uow.eventos_procesados.ya_procesado(evento_id):
+                existente = uow.asignaciones.obtener_por_trabajo(trabajo_id)
+                uow.commit()
+                return ResultadoEmparejamiento(asignacion=existente, ya_procesado=True)
+
+            asignacion = uow.asignaciones.obtener_por_id(asignacion_id)
+            if asignacion is None:
+                asignacion = uow.asignaciones.obtener_por_trabajo(trabajo_id)
+            if asignacion is not None:
+                asignacion.marcar_confirmado(_long(data.get("verificado_en")))
+                uow.asignaciones.guardar(asignacion)
+            uow.eventos_procesados.marcar(evento_id)
+            uow.commit()
+            log.info(
+                "asignacion_confirmada asignacion_id=%s trabajo_id=%s",
                 asignacion_id,
                 trabajo_id,
             )
