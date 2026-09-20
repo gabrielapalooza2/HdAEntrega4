@@ -39,6 +39,7 @@ _RUTAS_SCHEMA = {
     "AcreditarProveedor": "esquemas/cmd.proveedores/AcreditarProveedor.avsc",
     "SuspenderProveedor": "esquemas/cmd.proveedores/SuspenderProveedor.avsc",
     "TrabajoAsignado": "esquemas/evt.trabajos/TrabajoAsignado.avsc",
+    "AsignacionAceptadaPorReglaPartner": "esquemas/evt.asignaciones/AsignacionAceptadaPorReglaPartner.avsc",
     "EstadoDeHabilitacionCambiado": "esquemas/evt.proveedores/EstadoDeHabilitacionCambiado.avsc",
     "AsignacionRechazadaPorHabilitacion": "esquemas/evt.asignaciones/AsignacionRechazadaPorHabilitacion.avsc",
     "AsignacionConfirmadaPorHabilitacion": "esquemas/evt.asignaciones/AsignacionConfirmadaPorHabilitacion.avsc",
@@ -120,7 +121,7 @@ def codificar_evento(evento, correlation_id: str) -> tuple[bytes, dict]:
 
 # Tipos que este servicio sabe decodificar, agrupados por lo que consume.
 TIPOS_CMD_PROVEEDORES = {"AcreditarProveedor", "SuspenderProveedor"}
-TIPOS_EVT_TRABAJOS = {"TrabajoAsignado"}
+TIPOS_EVT_ASIGNACIONES = {"AsignacionAceptadaPorReglaPartner"}
 
 _ESQUEMA_SOBRE = fastavro.parse_schema({
     "type": "record",
@@ -142,8 +143,8 @@ def tipo_del_sobre(payload: bytes) -> str | None:
     """Lee el discriminador CloudEvents sin conocer el esquema del payload.
 
     Emparejamiento publica TrabajoAsignado como bytes Avro y a veces sin
-    propiedad Pulsar `type`. Sin este peek el consumidor ackea y silencia
-    el paso que dispara la saga.
+    propiedad Pulsar `type`. Motor publica AsignacionAceptadaPorReglaPartner
+    igual. Sin este peek el consumidor ackea y silencia el paso.
     """
     if not payload:
         return None

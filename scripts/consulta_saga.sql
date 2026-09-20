@@ -2,9 +2,21 @@
 --   docker exec -i db-trabajos psql -U trabajos -d trabajos < scripts/consulta_saga.sql
 --
 -- El log es append-only en saga_paso. saga_asignacion es el estado actual.
+-- Coordinador de sagas: orquestacion-trabajos (columna coordinador).
+-- Deben verse CUATRO servicios en saga_paso.servicio.
+
+\echo '=== coordinador de sagas (no es un quinto microservicio) ==='
+SELECT DISTINCT coordinador FROM saga_asignacion;
+
+\echo '=== participantes en el log (se esperan 4 servicios) ==='
+SELECT servicio, count(*) AS pasos
+  FROM saga_paso
+ GROUP BY servicio
+ ORDER BY servicio;
 
 \echo '=== transacciones largas (estado actual) ==='
 SELECT saga_id,
+       coordinador,
        estado,
        partner_id,
        proveedor_id,

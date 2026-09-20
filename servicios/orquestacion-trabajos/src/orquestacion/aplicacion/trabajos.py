@@ -73,13 +73,10 @@ def _publicar(cur, eventos_nuevos: list[ev.EventoDeDominio], *,
                 )
 
             case ev.ReasignacionSolicitada():
-                # El UNICO comando que este servicio emite. Todo lo demas son
-                # hechos. Ver decidir_rechazo_de_habilitacion.
-                mensaje = c.AsignarProveedor(
-                    trabajo_id=evento.trabajo_id, motivo=evento.motivo,
-                    proveedores_excluidos=list(evento.proveedores_excluidos),
-                    intento=evento.intento,
-                )
+                # Fuera de la saga. Publicar AsignarProveedor seria mandar un
+                # comando a Emparejamiento (orquestacion) y ese comando no tiene
+                # consumidor. La compensacion coreografiada es ProveedorDescartado.
+                continue
 
             # ProveedorAsignado, ProveedorDescartado y TrabajoEscalado NO se
             # publican: son hechos internos de nuestra maquina de estados y
@@ -221,14 +218,38 @@ def manejar_trabajo_asignado(sobre: c.Sobre) -> None:
     logger.info("Trabajo %s ASIGNADO a %s", mensaje.trabajo_id, mensaje.proveedor_id)
 
 
-# ════════════════════════════════ AsignacionRechazadaPorHabilitacion ═══════
+def _aplicar_compensacion(cur, *, trabajo_id: str, correlation_id: str,
+                          proveedor_id: str, asignacion_id: str, motivo: str,
+                          tipo_mensaje: str, servicio: str) -> list[ev.EventoDeDominio]:
+    historia = almacen.leer(cur, trabajo_id)
+    trabajo = dominio.Trabajo.reconstruir(trabajo_id, historia)
+    if not trabajo.existe:
+        raise LookupError(
+            f"{tipo_mensaje} para {trabajo_id}, que aun no existe en el "
+            f"event store; se devuelve al broker")
+
+    nuevos = dominio.decidir_rechazo_de_habilitacion(
+        trabajo, proveedor_id=proveedor_id, motivo=motivo,
+        max_intentos=config.MAX_INTENTOS_ASIGNACION)
+    if not nuevos:
+        return []
+
+    _confirmar(cur, trabajo.trabajo_id, nuevos,
+               secuencia_actual=trabajo.secuencia,
+               correlation_id=correlation_id)
+    saga_log.marcar_compensacion(
+        cur, trabajo_id=trabajo_id, correlation_id=correlation_id,
+        proveedor_id=proveedor_id, asignacion_id=asignacion_id, motivo=motivo,
+        estado_trabajo=dominio.Trabajo.reconstruir(
+            trabajo_id, almacen.leer(cur, trabajo_id)
+        ).estado.value,
+        tipo_mensaje=tipo_mensaje, servicio=servicio,
+    )
+    return nuevos
+
 
 def manejar_asignacion_rechazada(sobre: c.Sobre) -> None:
-    """evt.asignaciones -> reintento acotado, o escalamiento.
-
-    EL UNICO PUNTO ORQUESTADO DEL SISTEMA. Ver
-    dominio.decidir_rechazo_de_habilitacion.
-    """
+    """evt.asignaciones -> compensacion coreografiada (deshace ASIGNADO)."""
     mensaje: c.AsignacionRechazadaPorHabilitacion = sobre.contenido()
 
     with bd.pool().connection() as con, con.cursor() as cur:
@@ -236,46 +257,77 @@ def manejar_asignacion_rechazada(sobre: c.Sobre) -> None:
             logger.info("AsignacionRechazada: sobre %s repetido, se descarta",
                         sobre.id)
             return
-
-        historia = almacen.leer(cur, mensaje.trabajo_id)
-        trabajo = dominio.Trabajo.reconstruir(mensaje.trabajo_id, historia)
-
-        if not trabajo.existe:
-            raise LookupError(
-                f"AsignacionRechazada para {mensaje.trabajo_id}, que aun no "
-                f"existe en el event store; se devuelve al broker")
-
-        nuevos = dominio.decidir_rechazo_de_habilitacion(
-            trabajo, proveedor_id=mensaje.proveedor_id,
-            motivo=mensaje.motivo or mensaje.estado_real,
-            max_intentos=config.MAX_INTENTOS_ASIGNACION)
-
-        if not nuevos:
-            return
-
-        _confirmar(cur, trabajo.trabajo_id, nuevos,
-                   secuencia_actual=trabajo.secuencia,
-                   correlation_id=sobre.correlation_id)
-
-        saga_log.marcar_compensacion(
+        nuevos = _aplicar_compensacion(
             cur, trabajo_id=mensaje.trabajo_id,
             correlation_id=sobre.correlation_id,
             proveedor_id=mensaje.proveedor_id,
             asignacion_id=mensaje.asignacion_id,
             motivo=mensaje.motivo or mensaje.estado_real,
-            estado_trabajo=dominio.Trabajo.reconstruir(
-                mensaje.trabajo_id, almacen.leer(cur, mensaje.trabajo_id)
-            ).estado.value,
+            tipo_mensaje=c.AsignacionRechazadaPorHabilitacion.TIPO,
+            servicio=saga_log.SERVICIO_ACREDITACION,
         )
 
     for evento in nuevos:
         if isinstance(evento, ev.ReasignacionSolicitada):
-            logger.info("Trabajo %s: intento %s, se pide otro proveedor "
-                        "(excluidos %s)", mensaje.trabajo_id, evento.intento,
-                        sorted(evento.proveedores_excluidos))
+            logger.info("Trabajo %s: compensado, excluidos internos %s "
+                        "(sin comando a Emparejamiento)",
+                        mensaje.trabajo_id, sorted(evento.proveedores_excluidos))
         elif isinstance(evento, ev.TrabajoEscalado):
             logger.warning("Trabajo %s ESCALADO_MANUAL: %s | %s",
                            mensaje.trabajo_id, evento.motivo, evento.detalle)
+
+
+def manejar_regla_aceptada(sobre: c.Sobre) -> None:
+    """evt.asignaciones <- Motor. El coordinador anota el paso; no manda nada."""
+    mensaje: c.AsignacionAceptadaPorReglaPartner = sobre.contenido()
+
+    with bd.pool().connection() as con, con.cursor() as cur:
+        if not bd.reclamar_mensaje(cur, sobre.id):
+            logger.info("ReglaAceptada: sobre %s repetido, se descarta", sobre.id)
+            return
+
+        historia = almacen.leer(cur, mensaje.trabajo_id)
+        trabajo = dominio.Trabajo.reconstruir(mensaje.trabajo_id, historia)
+        if not trabajo.existe:
+            raise LookupError(
+                f"AsignacionAceptadaPorReglaPartner para {mensaje.trabajo_id}, "
+                f"que aun no existe; se devuelve al broker")
+
+        saga_log.marcar_regla_aceptada(
+            cur, trabajo_id=mensaje.trabajo_id,
+            correlation_id=sobre.correlation_id,
+            proveedor_id=mensaje.proveedor_id,
+            asignacion_id=mensaje.asignacion_id,
+            partner_id=mensaje.partner_id,
+            regla_version=mensaje.regla_version,
+        )
+
+    logger.info("Trabajo %s: Motor ACEPTO proveedor %s (regla v%s)",
+                mensaje.trabajo_id, mensaje.proveedor_id, mensaje.regla_version)
+
+
+def manejar_regla_rechazada(sobre: c.Sobre) -> None:
+    """evt.asignaciones <- Motor. Compensacion: proveedor fuera de la red viva."""
+    mensaje: c.AsignacionRechazadaPorReglaPartner = sobre.contenido()
+
+    with bd.pool().connection() as con, con.cursor() as cur:
+        if not bd.reclamar_mensaje(cur, sobre.id):
+            logger.info("ReglaRechazada: sobre %s repetido, se descarta", sobre.id)
+            return
+        nuevos = _aplicar_compensacion(
+            cur, trabajo_id=mensaje.trabajo_id,
+            correlation_id=sobre.correlation_id,
+            proveedor_id=mensaje.proveedor_id,
+            asignacion_id=mensaje.asignacion_id,
+            motivo=mensaje.motivo or "PROVEEDOR_FUERA_DE_RED",
+            tipo_mensaje=c.AsignacionRechazadaPorReglaPartner.TIPO,
+            servicio=saga_log.SERVICIO_MOTOR,
+        )
+
+    for evento in nuevos:
+        if isinstance(evento, ev.TrabajoEscalado):
+            logger.warning("Trabajo %s ESCALADO_MANUAL tras rechazo de Motor: %s",
+                           mensaje.trabajo_id, evento.detalle)
 
 
 # ════════════════════════════ AsignacionConfirmadaPorHabilitacion ══════════

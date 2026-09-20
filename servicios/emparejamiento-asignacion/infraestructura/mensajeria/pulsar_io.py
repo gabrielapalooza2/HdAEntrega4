@@ -107,6 +107,12 @@ class ConsumidoresPulsar:
         self.avsc_confirmacion = cargar_avsc(
             contratos_dir, "evt.asignaciones", "AsignacionConfirmadaPorHabilitacion"
         )
+        self.avsc_regla_ok = cargar_avsc(
+            contratos_dir, "evt.asignaciones", "AsignacionAceptadaPorReglaPartner"
+        )
+        self.avsc_regla_ko = cargar_avsc(
+            contratos_dir, "evt.asignaciones", "AsignacionRechazadaPorReglaPartner"
+        )
         self._avsc_trabajos = {
             "TrabajoCreado": self.avsc_creado,
             "TrabajoAsignado": self.avsc_asignado,
@@ -115,6 +121,8 @@ class ConsumidoresPulsar:
         self._avsc_asignaciones = {
             "AsignacionRechazadaPorHabilitacion": self.avsc_rechazo,
             "AsignacionConfirmadaPorHabilitacion": self.avsc_confirmacion,
+            "AsignacionAceptadaPorReglaPartner": self.avsc_regla_ok,
+            "AsignacionRechazadaPorReglaPartner": self.avsc_regla_ko,
         }
 
     def arrancar(self) -> None:
@@ -231,7 +239,10 @@ class ConsumidoresPulsar:
         if tipo == "AsignacionConfirmadaPorHabilitacion":
             self._on_confirmacion(payload)
             return
-        self._on_rechazo(payload)
+        if tipo in ("AsignacionRechazadaPorHabilitacion", "AsignacionRechazadaPorReglaPartner"):
+            self._on_rechazo(payload)
+            return
+        # AsignacionAceptadaPorReglaPartner: el siguiente paso es de Acreditacion.
 
 
 # Referencias para que el schema registry de tópicos de un solo tipo

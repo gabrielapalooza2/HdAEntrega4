@@ -169,6 +169,38 @@ def test_idempotencia_evento_id():
     assert mem.asignaciones[r1.asignacion.asignacion_id].verificado_en == 1_700_000_000_000
 
 
+def test_rechazo_de_regla_partner_marca_y_no_republica():
+    mem, pub = MemRepo(), PubMem()
+    a = Asignacion(
+        asignacion_id="a-1",
+        trabajo_id="t-1",
+        proveedor_id="prov-a",
+        partner_id="p-1",
+        correlacion_id="c-1",
+        sla_vence_en=1,
+        verificado_en=1,
+        ocurrido_en=1,
+        estado=EstadoAsignacion.ASIGNADO,
+    )
+    mem.guardar(a)
+    svc = ServicioAsignacion(lambda: MemUoW(mem), pub, RelojFijo())
+    r = svc.on_rechazo_habilitacion(_ce(
+        "AsignacionRechazadaPorReglaPartner",
+        {
+            "trabajo_id": "t-1",
+            "asignacion_id": "a-1",
+            "proveedor_id": "prov-a",
+            "partner_id": "p-1",
+            "regla_version": 1,
+            "motivo": "PROVEEDOR_FUERA_DE_RED",
+            "verificado_en": 1,
+        },
+        eid="rej-regla-1",
+    ))
+    assert r.asignacion.estado == EstadoAsignacion.RECHAZADO
+    assert pub.eventos == []
+
+
 def test_rechazo_marca_y_no_republica():
     mem, pub = MemRepo(), PubMem()
     a = Asignacion(

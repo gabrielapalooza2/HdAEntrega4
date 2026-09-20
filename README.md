@@ -361,13 +361,17 @@ No hay un script de demo único. Las pruebas de Orquestación cubren el comporta
 - Tres rechazos de habilitación. el tercero escala. Tope `MAX_INTENTOS_ASIGNACION=3`.
 - El barrido pasa a `ESCALADO_MANUAL` cuando vence el SLA y el estado no es terminal.
 
-Orquestación publica `AsignarProveedor` en `cmd.emparejamiento`. Emparejamiento no lo consume. La rama de reasignación no cierra de punta a punta hasta que ese comando tenga dueño. El camino feliz sí cierra. `CrearTrabajo` → `TrabajoCreado` → matching → `TrabajoAsignado` → estado `ASIGNADO`.
+Orquestación **no** publica `AsignarProveedor` en la saga: Emparejamiento no
+lo consume y mandarlo rompería la coreografía. El camino feliz cierra
+`CrearTrabajo` → `TrabajoCreado` → matching → `TrabajoAsignado` → Motor
+acepta la red homologada → Acreditación confirma → estado `ASIGNADO`.
 
 ## Entrega 5. saga de asignación
 
-Coreografía entre Orquestación, Emparejamiento y Acreditación. El saga log
-vive en `db-trabajos` (tablas `saga_asignacion` y `saga_paso`). Decisión,
-diagrama y SQL: `docs/entrega5/arquitectura-saga.md`.
+Coreografía entre **cuatro** servicios: Orquestación (coordinador de sagas +
+log), Emparejamiento, Motor de reglas partner y Acreditación. El saga log
+vive en `db-trabajos` (tablas `saga_asignacion` y `saga_paso`, columna
+`coordinador`). Decisión, diagrama e imagen: `docs/entrega5/arquitectura-saga.md`.
 
 ```bash
 make todo
@@ -383,7 +387,7 @@ Desde la raíz, con Make y Python en el PATH.
 make pruebas
 ```
 
-El target entra a cada carpeta de `servicios/` y corre `pytest`. Acreditación no tiene carpeta `tests/`. Ese directorio imprime `sin pruebas`.
+El target entra a cada carpeta de `servicios/` y corre `pytest`. Acreditación tiene `tests/test_verificar_asignacion.py`. Motor tiene `tests/test_saga_asignacion.py` (paso de red homologada).
 
 A mano.
 

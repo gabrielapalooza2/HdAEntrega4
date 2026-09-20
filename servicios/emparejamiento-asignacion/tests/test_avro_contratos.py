@@ -76,6 +76,9 @@ def test_esquemas_oficiales_existen_y_no_se_inventan():
         ("evt.partners", "ReglaDePartnerActualizada"),
         ("evt.proveedores", "EstadoDeHabilitacionCambiado"),
         ("evt.asignaciones", "AsignacionRechazadaPorHabilitacion"),
+        ("evt.asignaciones", "AsignacionConfirmadaPorHabilitacion"),
+        ("evt.asignaciones", "AsignacionAceptadaPorReglaPartner"),
+        ("evt.asignaciones", "AsignacionRechazadaPorReglaPartner"),
         ("cmd.emparejamiento", "AsignarProveedor"),
     ):
         avsc = cargar_avsc(CONTRATOS, topico, nombre)

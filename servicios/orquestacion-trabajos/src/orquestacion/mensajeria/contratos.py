@@ -94,6 +94,8 @@ CARPETA_DE_TIPO = {
     "TrabajoAsignado":                    "evt.trabajos",
     "AsignacionRechazadaPorHabilitacion": "evt.asignaciones",
     "AsignacionConfirmadaPorHabilitacion": "evt.asignaciones",
+    "AsignacionAceptadaPorReglaPartner":  "evt.asignaciones",
+    "AsignacionRechazadaPorReglaPartner": "evt.asignaciones",
     "AsignarProveedor":                   "cmd.emparejamiento",
 }
 
@@ -550,6 +552,88 @@ class AsignacionConfirmadaPorHabilitacion(_Mensaje):
         )
 
 
+@dataclass
+class AsignacionAceptadaPorReglaPartner(_Mensaje):
+    """Evento de Motor de reglas partner, en evt.asignaciones.
+
+    El dato autoritativo de la red homologada. Emparejamiento asigno contra
+    su proyeccion; Motor confirma o rechaza. Orquestacion solo anota el log
+    (coordinador de sagas). Acreditacion reacciona a ESTE hecho, no a un
+    comando de Orquestacion.
+    """
+    TIPO: ClassVar[str] = "AsignacionAceptadaPorReglaPartner"
+    TOPICO: ClassVar[str] = TOPICO_EVT_ASIGNACIONES
+
+    trabajo_id: str = ""
+    asignacion_id: str = ""
+    proveedor_id: str = ""
+    partner_id: str = ""
+    regla_version: int = 0
+    motivo: str = ""
+    verificado_en: datetime | None = None
+
+    def a_datos(self) -> dict:
+        return {
+            "trabajo_id": self.trabajo_id,
+            "asignacion_id": self.asignacion_id,
+            "proveedor_id": self.proveedor_id,
+            "partner_id": self.partner_id,
+            "regla_version": self.regla_version,
+            "motivo": self.motivo,
+            "verificado_en": a_ms(self.verificado_en) or ahora_ms(),
+        }
+
+    @classmethod
+    def desde_datos(cls, d: dict) -> "AsignacionAceptadaPorReglaPartner":
+        return cls(
+            trabajo_id=d.get("trabajo_id") or "",
+            asignacion_id=d.get("asignacion_id") or "",
+            proveedor_id=d.get("proveedor_id") or "",
+            partner_id=d.get("partner_id") or "",
+            regla_version=d.get("regla_version") or 0,
+            motivo=d.get("motivo") or "",
+            verificado_en=de_ms(d.get("verificado_en")),
+        )
+
+
+@dataclass
+class AsignacionRechazadaPorReglaPartner(_Mensaje):
+    """Compensacion disparada por Motor: el proveedor no esta en la red viva."""
+    TIPO: ClassVar[str] = "AsignacionRechazadaPorReglaPartner"
+    TOPICO: ClassVar[str] = TOPICO_EVT_ASIGNACIONES
+
+    trabajo_id: str = ""
+    asignacion_id: str = ""
+    proveedor_id: str = ""
+    partner_id: str = ""
+    regla_version: int = 0
+    motivo: str = ""
+    verificado_en: datetime | None = None
+
+    def a_datos(self) -> dict:
+        return {
+            "trabajo_id": self.trabajo_id,
+            "asignacion_id": self.asignacion_id,
+            "proveedor_id": self.proveedor_id,
+            "partner_id": self.partner_id,
+            "regla_version": self.regla_version,
+            "motivo": self.motivo,
+            "verificado_en": a_ms(self.verificado_en) or ahora_ms(),
+        }
+
+    @classmethod
+    def desde_datos(cls, d: dict) -> "AsignacionRechazadaPorReglaPartner":
+        return cls(
+            trabajo_id=d.get("trabajo_id") or "",
+            asignacion_id=d.get("asignacion_id") or "",
+            proveedor_id=d.get("proveedor_id") or "",
+            partner_id=d.get("partner_id") or "",
+            regla_version=d.get("regla_version") or 0,
+            motivo=d.get("motivo") or "",
+            verificado_en=de_ms(d.get("verificado_en")),
+        )
+
+
 # ─────────────────────────────────────────────────────────────── salientes ──
 
 @dataclass
@@ -649,20 +733,13 @@ class TrabajoRechazado(_Mensaje):
 
 @dataclass
 class AsignarProveedor(_Mensaje):
-    """Comando propio hacia Emparejamiento, a cmd.emparejamiento.
+    """Comando hacia Emparejamiento, a cmd.emparejamiento.
 
-    ─── SIN CONSUMIDOR HOY ───────────────────────────────────────────────
-    Emparejamiento declara este topico como "no se consume (E5)". El .avsc
-    existe, asi que no hay que inventar nada, pero nadie escucha todavia. Se
-    publica igual: la reasignacion es el unico punto ORQUESTADO del sistema y es
-    alcance propio de este servicio. Sin consumidor, la demo de punta a punta se
-    corta aqui.
-    ───────────────────────────────────────────────────────────────────────
-
-    proveedores_excluidos viaja CON el comando porque Emparejamiento no puede
-    leer nuestra base de datos. En una arquitectura de eventos el estado
-    necesario para decidir va EN EL MENSAJE, no en una consulta al emisor.
-    En el cable se llama `excluir_proveedores`.
+    FUERA DE LA SAGA COREOGRAFIADA. Emparejamiento no lo consume (test
+    `test_sin_asignar_proveedor`). Publicarlo convertiria a Orquestacion en
+    un orquestador que manda a otro servicio. La compensacion de la saga es
+    el hecho interno ProveedorDescartado. El .avsc se conserva para no
+    inventar el contrato.
     """
     TIPO: ClassVar[str] = "AsignarProveedor"
     TOPICO: ClassVar[str] = TOPICO_CMD_EMPAREJAMIENTO
@@ -697,6 +774,8 @@ MENSAJES_ENTRANTES = (
     CrearTrabajo,
     ReglaDePartnerActualizada,
     TrabajoAsignado,
+    AsignacionAceptadaPorReglaPartner,
+    AsignacionRechazadaPorReglaPartner,
     AsignacionRechazadaPorHabilitacion,
     AsignacionConfirmadaPorHabilitacion,
 )

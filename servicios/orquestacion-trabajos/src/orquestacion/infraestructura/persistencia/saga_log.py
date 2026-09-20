@@ -1,17 +1,25 @@
 """Saga log de la asignacion de un trabajo. SQL crudo, psycopg3, sin ORM.
 
+COORDINADOR DE SAGAS
+--------------------
+Orquestacion de trabajos ES el coordinador de sagas. No es un orquestador
+que mande comandos a los demas: es el dueno de `trabajo_id`, del event store
+del agregado Trabajo y de las tablas `saga_asignacion` / `saga_paso`. La
+rubrica pide un coordinador + saga log; no pide un quinto microservicio.
+
+El campo `coordinador` queda en `orquestacion-trabajos` para que el tutor
+lo vea en SQL y en GET /sagas, sin desplegar un proceso aparte.
+
 Por que vive AQUI y no en un microservicio dedicado
 ---------------------------------------------------
 La saga es el ciclo de respuesta de UN trabajo. Su identidad es trabajo_id,
-que ya es la PK del event store. Este servicio ya consume los tres mensajes
-que marcan el avance (TrabajoCreado lo produce, TrabajoAsignado y la
-confirmacion/rechazo de habilitacion los consume). Un quinto servicio que
-solo escribiera el mismo log seria un observador extra, otra base y otro
-contenedor, sin dueño de agregado.
+que ya es la PK del event store. Este servicio produce o consume los hitos
+de los cuatro participantes (TrabajoCreado lo produce; TrabajoAsignado, el
+veredicto de Motor y la confirmacion/rechazo de habilitacion los consume).
 
 El log NO dirige: no publica comandos. Es una proyeccion para operar y para
 que un tutor inspeccione el workflow con SQL. La coreografia sigue siendo
-eventos entre Orquestacion, Emparejamiento y Acreditacion.
+eventos entre Orquestacion, Motor, Emparejamiento y Acreditacion.
 
 Por que SQL expresivo y no un ORM
 ---------------------------------
@@ -29,9 +37,12 @@ import psycopg
 
 from orquestacion.infraestructura.persistencia.bd import _como_uuid
 
-SERVICIO_ORQUESTACION = "orquestacion-trabajos"
+# Nombre del coordinador de sagas (este servicio). No es un quinto contenedor.
+SERVICIO_COORDINADOR = "orquestacion-trabajos"
+SERVICIO_ORQUESTACION = SERVICIO_COORDINADOR
 SERVICIO_EMPAREJAMIENTO = "emparejamiento-asignacion"
 SERVICIO_ACREDITACION = "acreditacion-habilitacion"
+SERVICIO_MOTOR = "motor-reglas-partner"
 
 
 def _json(valor: dict[str, Any] | None) -> str:
@@ -71,11 +82,11 @@ def _upsert_cabecera(cur: psycopg.Cursor, *, saga_id: str, correlation_id: str,
         """
         INSERT INTO saga_asignacion (
             saga_id, correlation_id, estado, partner_id, proveedor_id,
-            asignacion_id, paso_actual, motivo, iniciada_en, actualizada_en,
-            cerrada_en
+            asignacion_id, paso_actual, motivo, coordinador, iniciada_en,
+            actualizada_en, cerrada_en
         )
         VALUES (
-            %s::uuid, %s, %s, %s, %s, %s, %s, %s, now(), now(),
+            %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, now(), now(),
             CASE WHEN %s THEN now() ELSE NULL END
         )
         ON CONFLICT (saga_id) DO UPDATE SET
@@ -100,7 +111,7 @@ def _upsert_cabecera(cur: psycopg.Cursor, *, saga_id: str, correlation_id: str,
             END
         """,
         (_como_uuid(saga_id), correlation_id, estado, partner_id, proveedor_id,
-         asignacion_id, paso_actual, motivo, cerrar),
+         asignacion_id, paso_actual, motivo, SERVICIO_COORDINADOR, cerrar),
     )
 
 
@@ -132,6 +143,26 @@ def marcar_asignacion_optimista(cur: psycopg.Cursor, *, trabajo_id: str,
     )
 
 
+def marcar_regla_aceptada(cur: psycopg.Cursor, *, trabajo_id: str,
+                          correlation_id: str, proveedor_id: str,
+                          asignacion_id: str, partner_id: str = "",
+                          regla_version: int = 0) -> None:
+    """Paso del Motor: la red homologada autoritativa admite al proveedor."""
+    _upsert_cabecera(
+        cur, saga_id=trabajo_id, correlation_id=correlation_id,
+        estado="EN_CURSO", paso_actual="AsignacionAceptadaPorReglaPartner",
+        partner_id=partner_id or None, proveedor_id=proveedor_id,
+        asignacion_id=asignacion_id,
+    )
+    anexar_paso(
+        cur, saga_id=trabajo_id, servicio=SERVICIO_MOTOR,
+        tipo_mensaje="AsignacionAceptadaPorReglaPartner",
+        rol="PASO", resultado="OK",
+        payload={"proveedor_id": proveedor_id, "asignacion_id": asignacion_id,
+                 "partner_id": partner_id, "regla_version": regla_version},
+    )
+
+
 def marcar_confirmada(cur: psycopg.Cursor, *, trabajo_id: str,
                       correlation_id: str, proveedor_id: str,
                       asignacion_id: str, estado_real: str) -> None:
@@ -152,17 +183,19 @@ def marcar_confirmada(cur: psycopg.Cursor, *, trabajo_id: str,
 def marcar_compensacion(cur: psycopg.Cursor, *, trabajo_id: str,
                         correlation_id: str, proveedor_id: str,
                         asignacion_id: str, motivo: str,
-                        estado_trabajo: str) -> None:
+                        estado_trabajo: str,
+                        tipo_mensaje: str = "AsignacionRechazadaPorHabilitacion",
+                        servicio: str = SERVICIO_ACREDITACION) -> None:
     estado_saga = "FALLIDA" if estado_trabajo == "ESCALADO_MANUAL" else "COMPENSADA"
     _upsert_cabecera(
         cur, saga_id=trabajo_id, correlation_id=correlation_id,
-        estado=estado_saga, paso_actual="AsignacionRechazadaPorHabilitacion",
+        estado=estado_saga, paso_actual=tipo_mensaje,
         proveedor_id=proveedor_id, asignacion_id=asignacion_id, motivo=motivo,
         cerrar=True,
     )
     anexar_paso(
-        cur, saga_id=trabajo_id, servicio=SERVICIO_ACREDITACION,
-        tipo_mensaje="AsignacionRechazadaPorHabilitacion",
+        cur, saga_id=trabajo_id, servicio=servicio,
+        tipo_mensaje=tipo_mensaje,
         rol="COMPENSACION", resultado="RECHAZO",
         payload={"proveedor_id": proveedor_id, "asignacion_id": asignacion_id,
                  "motivo": motivo},
@@ -179,8 +212,8 @@ def obtener(cur: psycopg.Cursor, saga_id: str) -> dict | None:
     cur.execute(
         """
         SELECT saga_id, correlation_id, estado, partner_id, proveedor_id,
-               asignacion_id, paso_actual, motivo, iniciada_en, actualizada_en,
-               cerrada_en,
+               asignacion_id, paso_actual, motivo, coordinador, iniciada_en,
+               actualizada_en, cerrada_en,
                EXTRACT(EPOCH FROM (COALESCE(cerrada_en, now()) - iniciada_en))
                  AS duracion_segundos
           FROM saga_asignacion
@@ -221,10 +254,11 @@ def obtener(cur: psycopg.Cursor, saga_id: str) -> dict | None:
         "asignacion_id": cab[5],
         "paso_actual": cab[6],
         "motivo": cab[7],
-        "iniciada_en": cab[8].isoformat() if cab[8] else None,
-        "actualizada_en": cab[9].isoformat() if cab[9] else None,
-        "cerrada_en": cab[10].isoformat() if cab[10] else None,
-        "duracion_segundos": float(cab[11]) if cab[11] is not None else None,
+        "coordinador": cab[8] or SERVICIO_COORDINADOR,
+        "iniciada_en": cab[9].isoformat() if cab[9] else None,
+        "actualizada_en": cab[10].isoformat() if cab[10] else None,
+        "cerrada_en": cab[11].isoformat() if cab[11] else None,
+        "duracion_segundos": float(cab[12]) if cab[12] is not None else None,
         "pasos": pasos,
     }
 
@@ -234,7 +268,7 @@ def listar(cur: psycopg.Cursor, estado: str | None = None, limite: int = 50) -> 
         cur.execute(
             """
             SELECT saga_id, estado, partner_id, proveedor_id, paso_actual,
-                   iniciada_en, cerrada_en
+                   coordinador, iniciada_en, cerrada_en
               FROM saga_asignacion
              WHERE estado = %s
              ORDER BY iniciada_en DESC
@@ -246,7 +280,7 @@ def listar(cur: psycopg.Cursor, estado: str | None = None, limite: int = 50) -> 
         cur.execute(
             """
             SELECT saga_id, estado, partner_id, proveedor_id, paso_actual,
-                   iniciada_en, cerrada_en
+                   coordinador, iniciada_en, cerrada_en
               FROM saga_asignacion
              ORDER BY iniciada_en DESC
              LIMIT %s
@@ -260,8 +294,9 @@ def listar(cur: psycopg.Cursor, estado: str | None = None, limite: int = 50) -> 
             "partner_id": fila[2],
             "proveedor_id": fila[3],
             "paso_actual": fila[4],
-            "iniciada_en": fila[5].isoformat() if fila[5] else None,
-            "cerrada_en": fila[6].isoformat() if fila[6] else None,
+            "coordinador": fila[5] or SERVICIO_COORDINADOR,
+            "iniciada_en": fila[6].isoformat() if fila[6] else None,
+            "cerrada_en": fila[7].isoformat() if fila[7] else None,
         }
         for fila in cur.fetchall()
     ]

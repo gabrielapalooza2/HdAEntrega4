@@ -1,7 +1,9 @@
 """Consulta del saga log. Solo lectura, para un operador o un tutor.
 
-No es BFF ni CSaaS. No dispara la saga. El estado se mira tambien con SQL
-sobre saga_asignacion y saga_paso; estas rutas evitan copiar PGPASSWORD.
+Orquestacion de trabajos es el COORDINADOR DE SAGAS: dueño de saga_asignacion,
+saga_paso y trabajo_id. No es BFF ni CSaaS. No dispara la saga ni manda
+comandos a los otros tres participantes. El estado se mira tambien con SQL;
+estas rutas evitan copiar PGPASSWORD.
 """
 from flask import Blueprint, jsonify, request
 
@@ -15,7 +17,10 @@ def listar():
     estado = request.args.get("estado")
     with bd.pool().connection() as con, con.cursor() as cur:
         filas = saga_log.listar(cur, estado=estado)
-    return jsonify({"sagas": filas})
+    return jsonify({
+        "coordinador": saga_log.SERVICIO_COORDINADOR,
+        "sagas": filas,
+    })
 
 
 @bp.get("/sagas/<saga_id>")

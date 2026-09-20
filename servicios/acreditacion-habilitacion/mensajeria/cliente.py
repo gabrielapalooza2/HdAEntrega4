@@ -25,6 +25,7 @@ TOPICO_EVT_ASIGNACIONES = "persistent://hda/poc/evt.asignaciones"
 
 SUSCRIPCION_CMD_PROVEEDORES = "acreditacion-cmd-proveedores"
 SUSCRIPCION_EVT_TRABAJOS = "acreditacion-evt-trabajos"
+SUSCRIPCION_EVT_ASIGNACIONES = "acreditacion-evt-asignaciones"
 
 
 def crear_cliente() -> pulsar.Client:

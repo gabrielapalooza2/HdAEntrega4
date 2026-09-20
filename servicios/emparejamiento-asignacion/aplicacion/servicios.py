@@ -23,8 +23,10 @@ TIPO_TRABAJO_RECHAZADO = "TrabajoRechazado"
 TIPO_REGLA = "ReglaDePartnerActualizada"
 TIPO_HABILITACION = "EstadoDeHabilitacionCambiado"
 TIPO_RECHAZO = "AsignacionRechazadaPorHabilitacion"
+TIPO_RECHAZO_REGLA = "AsignacionRechazadaPorReglaPartner"
 TIPO_CONFIRMACION = "AsignacionConfirmadaPorHabilitacion"
 TIPOS_TRABAJOS_IGNORAR = {TIPO_TRABAJO_ASIGNADO, TIPO_TRABAJO_RECHAZADO}
+TIPOS_RECHAZO = {TIPO_RECHAZO, TIPO_RECHAZO_REGLA}
 
 FabricaUoW = Callable[[], UnidadDeTrabajo]
 
@@ -223,7 +225,7 @@ class ServicioAsignacion:
         return ResultadoEmparejamiento(asignacion=asignacion, evento=evento)
 
     def on_rechazo_habilitacion(self, payload: dict) -> ResultadoEmparejamiento:
-        if tipo_de(payload) != TIPO_RECHAZO:
+        if tipo_de(payload) not in TIPOS_RECHAZO:
             return ResultadoEmparejamiento(
                 ignorado=True, motivo_ignorado=f"tipo filtrado: {tipo_de(payload)}"
             )

@@ -1,8 +1,8 @@
-"""Reaccion coreografiada a TrabajoAsignado (evt.trabajos, filtrado por type).
+"""Reaccion coreografiada a AsignacionAceptadaPorReglaPartner.
 
-Emparejamiento asigna contra su proyeccion local. Este servicio es el unico
-dueno del dato autoritativo: confirma o dispara la compensacion. Nadie le
-ordena el siguiente paso.
+Motor ya dijo que el proveedor esta en la red homologada viva. Este servicio
+es el unico dueno del dato autoritativo de habilitacion: confirma o dispara
+la compensacion. Nadie le ordena el siguiente paso.
 """
 from __future__ import annotations
 

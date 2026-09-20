@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS mensajes_procesados (
 );
 
 -- ══════════════════════════════════════════════════════════════ SAGA LOG ══
+-- COORDINADOR DE SAGAS: este servicio (orquestacion-trabajos).
 -- Proyeccion OBSERVADORA de la transaccion larga de asignacion.
 -- No es un orquestador: no emite comandos. Vive en esta base porque el
 -- identificador de la saga ES el trabajo_id, y este servicio ya reconstruye
@@ -150,7 +151,7 @@ CREATE TABLE IF NOT EXISTS mensajes_procesados (
 -- saga_asignacion  una fila por transaccion larga (estado actual)
 -- saga_paso        append-only: cada mensaje de la coreografia y cada
 --                  compensacion, para que un tutor pueda seguir el workflow
---                  con SQL.
+--                  con SQL. Deben aparecer los CUATRO participantes.
 CREATE TABLE IF NOT EXISTS saga_asignacion (
   saga_id        UUID PRIMARY KEY,
   correlation_id TEXT NOT NULL,
@@ -160,6 +161,7 @@ CREATE TABLE IF NOT EXISTS saga_asignacion (
   asignacion_id  TEXT,
   paso_actual    TEXT NOT NULL,
   motivo         TEXT,
+  coordinador    TEXT NOT NULL DEFAULT 'orquestacion-trabajos',
   iniciada_en    TIMESTAMPTZ NOT NULL DEFAULT now(),
   actualizada_en TIMESTAMPTZ NOT NULL DEFAULT now(),
   cerrada_en     TIMESTAMPTZ,
@@ -167,6 +169,10 @@ CREATE TABLE IF NOT EXISTS saga_asignacion (
     'INICIADA', 'EN_CURSO', 'COMPLETADA', 'COMPENSADA', 'FALLIDA'
   ))
 );
+
+-- Bases ya creadas por la saga de 3 participantes: anade el coordinador.
+ALTER TABLE saga_asignacion
+  ADD COLUMN IF NOT EXISTS coordinador TEXT NOT NULL DEFAULT 'orquestacion-trabajos';
 
 CREATE TABLE IF NOT EXISTS saga_paso (
   id           BIGSERIAL PRIMARY KEY,

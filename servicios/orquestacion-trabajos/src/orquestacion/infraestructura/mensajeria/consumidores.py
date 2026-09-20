@@ -193,6 +193,10 @@ def suscripciones() -> list[Suscripcion]:
                     aplicacion_trabajos.manejar_asignacion_rechazada,
                 c.AsignacionConfirmadaPorHabilitacion.TIPO:
                     aplicacion_trabajos.manejar_asignacion_confirmada,
+                c.AsignacionAceptadaPorReglaPartner.TIPO:
+                    aplicacion_trabajos.manejar_regla_aceptada,
+                c.AsignacionRechazadaPorReglaPartner.TIPO:
+                    aplicacion_trabajos.manejar_regla_rechazada,
             },
         ),
     ]

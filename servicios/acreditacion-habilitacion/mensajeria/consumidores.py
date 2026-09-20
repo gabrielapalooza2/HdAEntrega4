@@ -20,9 +20,9 @@ from aplicacion.comandos import acreditar_proveedor, suspender_proveedor, verifi
 from . import contratos
 from .cliente import (
     SUSCRIPCION_CMD_PROVEEDORES,
-    SUSCRIPCION_EVT_TRABAJOS,
+    SUSCRIPCION_EVT_ASIGNACIONES,
     TOPICO_CMD_PROVEEDORES,
-    TOPICO_EVT_TRABAJOS,
+    TOPICO_EVT_ASIGNACIONES,
     Publicador,
     crear_cliente,
 )
@@ -53,7 +53,7 @@ def _despachar_comando_proveedores(sobre: dict, session, publicar_evento):
         raise NotImplementedError(f"cmd.proveedores no reconoce el type '{tipo}'")
 
 
-def _despachar_evento_trabajos(sobre: dict, session, publicar_evento):
+def _despachar_evento_asignaciones(sobre: dict, session, publicar_evento):
     data = sobre.get("data") or {}
     comando = verificar_asignacion.VerificarAsignacion(
         trabajo_id=data.get("trabajo_id"), asignacion_id=data.get("asignacion_id"),
@@ -127,8 +127,8 @@ def iniciar_en_background() -> pulsar.Client:
         TOPICO_CMD_PROVEEDORES, SUSCRIPCION_CMD_PROVEEDORES,
         consumer_type=pulsar.ConsumerType.Failover,
     )
-    consumer_trabajos = cliente.subscribe(
-        TOPICO_EVT_TRABAJOS, SUSCRIPCION_EVT_TRABAJOS,
+    consumer_asignaciones = cliente.subscribe(
+        TOPICO_EVT_ASIGNACIONES, SUSCRIPCION_EVT_ASIGNACIONES,
         consumer_type=pulsar.ConsumerType.KeyShared,
     )
 
@@ -140,7 +140,7 @@ def iniciar_en_background() -> pulsar.Client:
 
     threading.Thread(
         target=_loop,
-        args=(consumer_trabajos, contratos.TIPOS_EVT_TRABAJOS, _despachar_evento_trabajos, publicador, "evt.trabajos"),
+        args=(consumer_asignaciones, contratos.TIPOS_EVT_ASIGNACIONES, _despachar_evento_asignaciones, publicador, "evt.asignaciones"),
         daemon=True,
     ).start()
 

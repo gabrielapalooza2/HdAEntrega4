@@ -14,7 +14,7 @@ cd "$ROOT"
 MOTOR="${MOTOR:-http://localhost:5002}"
 ORQ="${ORQ:-http://localhost:5001}"
 ACR="${ACR:-http://localhost:5004}"
-PAUSA="${PAUSA:-8}"
+PAUSA="${PAUSA:-10}"
 
 hr() { printf '\n\033[1m%s\033[0m\n%s\n' "$1" "────────────────────────────────────────────────────────────"; }
 esperar() { printf '\033[2m(esperando %ss a la coreografía…)\033[0m\n' "$PAUSA"; sleep "$PAUSA"; }
@@ -23,7 +23,7 @@ psql_trabajos() {
   docker exec -i db-trabajos psql -U trabajos -d trabajos -v ON_ERROR_STOP=1 "$@"
 }
 
-hr "salud de los tres participantes de la saga"
+hr "salud de los cuatro participantes de la saga"
 curl -sf "$ORQ/health"
 echo
 curl -sf "$MOTOR/health"
@@ -68,9 +68,10 @@ docker exec motor-reglas-partner python scripts/enviar_trabajo.py \
   --partner-id "$PARTNER" --categoria PLOMERIA --ciudad Bogota
 esperar
 
-hr "saga log — se espera COMPLETADA"
-psql_trabajos -c "SELECT saga_id, estado, proveedor_id, paso_actual FROM saga_asignacion ORDER BY iniciada_en DESC LIMIT 3;"
-psql_trabajos -c "SELECT secuencia, servicio, tipo_mensaje, rol, resultado FROM saga_paso ORDER BY ocurrido_en DESC, secuencia DESC LIMIT 8;"
+hr "saga log — se espera COMPLETADA y 4 servicios"
+psql_trabajos -c "SELECT saga_id, coordinador, estado, proveedor_id, paso_actual FROM saga_asignacion ORDER BY iniciada_en DESC LIMIT 3;"
+psql_trabajos -c "SELECT servicio, count(*) AS pasos FROM saga_paso GROUP BY servicio ORDER BY servicio;"
+psql_trabajos -c "SELECT secuencia, servicio, tipo_mensaje, rol, resultado FROM saga_paso ORDER BY ocurrido_en DESC, secuencia DESC LIMIT 12;"
 curl -sS "$ORQ/sagas?estado=COMPLETADA"
 echo
 
