@@ -165,6 +165,7 @@ services:
       - DB_PASSWORD=partners
       - DB_NAME=partners
       - SERVICE_NAME=motor-reglas-partner
+      - CONTRATOS_DIR=/app/contratos
     volumes: ["./contratos:/app/contratos:ro"]
     ports: ["5002:5000"]
 

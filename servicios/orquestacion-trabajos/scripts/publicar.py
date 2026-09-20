@@ -43,6 +43,7 @@ EMISORES = {
     "ReglaDePartnerActualizada":          "motor-reglas-partner",
     "TrabajoAsignado":                    "emparejamiento-asignacion",
     "AsignacionRechazadaPorHabilitacion": "acreditacion-habilitacion",
+    "AsignacionConfirmadaPorHabilitacion": "acreditacion-habilitacion",
 }
 
 
@@ -68,6 +69,11 @@ def ejemplos() -> dict:
             trabajo_id=str(uuid.uuid4()), asignacion_id=str(uuid.uuid4()),
             proveedor_id="PROV_001", estado_real="SUSPENDIDO",
             motivo="LICENCIA_VENCIDA", verificado_en=datetime.now(timezone.utc),
+        ),
+        "AsignacionConfirmadaPorHabilitacion": c.AsignacionConfirmadaPorHabilitacion(
+            trabajo_id=str(uuid.uuid4()), asignacion_id=str(uuid.uuid4()),
+            proveedor_id="PROV_001", estado_real="HABILITADO",
+            verificado_en=datetime.now(timezone.utc),
         ),
     }
 

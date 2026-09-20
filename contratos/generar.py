@@ -317,6 +317,66 @@ class EventoAsignacionRechazadaPorHabilitacion(Record):
     data = AsignacionRechazadaPorHabilitacionPayload()
 
 
+class AsignacionConfirmadaPorHabilitacionPayload(Record):
+    """CIERRE FELIZ DE LA SAGA.
+
+    Simetrico al rechazo: Acreditacion es el unico dueno del dato autoritativo
+    de habilitacion. Sin este evento la transaccion larga quedaria EN_CURSO
+    para siempre, esperando un silencio que ningun broker reporta.
+    """
+    trabajo_id = String()
+    asignacion_id = String()
+    proveedor_id = String()
+    estado_real = String()
+    verificado_en = Long()
+
+
+class EventoAsignacionConfirmadaPorHabilitacion(Record):
+    """evt.asignaciones (clave=trabajo_id) ← Acreditacion.
+    Consumen: Orquestacion (cierra el saga log) y Emparejamiento (CONFIRMADO)."""
+    id = String(); time = Long(); ingestion = Long()
+    specversion = String(default="v1")
+    type = String(default="AsignacionConfirmadaPorHabilitacion")
+    datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
+    data = AsignacionConfirmadaPorHabilitacionPayload()
+
+
+class AsignacionPorReglaPartnerPayload(Record):
+    """Veredicto AUTORITATIVO de Motor de reglas partner sobre la red homologada.
+
+    Emparejamiento asigna contra su proyeccion local de la regla (puede estar
+    desfasada). Motor es el dueno del agregado Partner: confirma o dispara
+    compensacion. Nadie le ordena el paso; reacciona a TrabajoAsignado.
+    """
+    trabajo_id = String()
+    asignacion_id = String()
+    proveedor_id = String()
+    partner_id = String()
+    regla_version = Integer()
+    motivo = String(default="")
+    verificado_en = Long()
+
+
+class EventoAsignacionAceptadaPorReglaPartner(Record):
+    """evt.asignaciones (clave=trabajo_id) ← Motor reglas partner.
+    Consumen: Orquestacion (saga log) y Acreditacion (siguiente paso)."""
+    id = String(); time = Long(); ingestion = Long()
+    specversion = String(default="v1")
+    type = String(default="AsignacionAceptadaPorReglaPartner")
+    datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
+    data = AsignacionPorReglaPartnerPayload()
+
+
+class EventoAsignacionRechazadaPorReglaPartner(Record):
+    """evt.asignaciones (clave=trabajo_id) ← Motor reglas partner.
+    Consumen: Orquestacion (compensa) y Emparejamiento (marca RECHAZADO)."""
+    id = String(); time = Long(); ingestion = Long()
+    specversion = String(default="v1")
+    type = String(default="AsignacionRechazadaPorReglaPartner")
+    datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
+    data = AsignacionPorReglaPartnerPayload()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 CATALOGO = {
     # flujo A — administrativo
@@ -334,6 +394,12 @@ CATALOGO = {
     "evt.trabajos/TrabajoAsignado.avsc":                EventoTrabajoAsignado,
     "evt.asignaciones/AsignacionRechazadaPorHabilitacion.avsc":
         EventoAsignacionRechazadaPorHabilitacion,
+    "evt.asignaciones/AsignacionConfirmadaPorHabilitacion.avsc":
+        EventoAsignacionConfirmadaPorHabilitacion,
+    "evt.asignaciones/AsignacionAceptadaPorReglaPartner.avsc":
+        EventoAsignacionAceptadaPorReglaPartner,
+    "evt.asignaciones/AsignacionRechazadaPorReglaPartner.avsc":
+        EventoAsignacionRechazadaPorReglaPartner,
 }
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from pulsar.schema import AvroSchema
 
 from motor_reglas.seedwork.infraestructura import utils
 
+from .saga_contratos import codificar_evento_saga
 from .schema.v1.eventos import EventoReglaDePartnerActualizada, ReglaDePartnerActualizadaPayload
 
 logger = logging.getLogger(__name__)
@@ -35,16 +36,22 @@ class Despachador:
             self._cliente = pulsar.Client(utils.broker_url())
         return self._cliente
 
-    def _obtener_productor(self, topico: str):
-        if topico not in self._productores:
-            self._productores[topico] = self._obtener_cliente().create_producer(
+    def _obtener_productor(self, topico: str, *, bytes_schema: bool = False):
+        clave = (topico, bytes_schema)
+        if clave not in self._productores:
+            schema = (
+                pulsar.schema.BytesSchema()
+                if bytes_schema
+                else AvroSchema(EventoReglaDePartnerActualizada)
+            )
+            self._productores[clave] = self._obtener_cliente().create_producer(
                 topico,
-                schema=AvroSchema(EventoReglaDePartnerActualizada),
+                schema=schema,
                 # batching para que el pico de 4x no se traduzca en 4x llamadas de red
                 batching_enabled=True,
                 batching_max_publish_delay_ms=10,
             )
-        return self._productores[topico]
+        return self._productores[clave]
 
     def publicar_evento_regla(self, payload: dict, clave: str, correlation_id: str, topico: str):
         """Publica con CLAVE.
@@ -68,6 +75,18 @@ class Despachador:
         self._obtener_productor(topico).send(evento, partition_key=clave)
         logger.info("Publicado ReglaDePartnerActualizada partner=%s v=%s",
                     payload.get("partner_id"), payload.get("version_regla"))
+
+    def publicar_evento_saga(self, tipo: str, payload: dict, clave: str,
+                             correlation_id: str, topico: str):
+        """Hechos de la saga hacia evt.asignaciones (BytesSchema, multi-tipo)."""
+        crudo = codificar_evento_saga(tipo, payload, correlation_id)
+        self._obtener_productor(topico, bytes_schema=True).send(
+            crudo,
+            partition_key=clave,
+            properties={"type": tipo, "correlation_id": correlation_id},
+        )
+        logger.info("Publicado %s trabajo=%s proveedor=%s",
+                    tipo, payload.get("trabajo_id"), payload.get("proveedor_id"))
 
     def cerrar(self):
         if self._cliente:

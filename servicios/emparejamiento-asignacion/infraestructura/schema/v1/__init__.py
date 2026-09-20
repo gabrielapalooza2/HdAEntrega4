@@ -7,6 +7,7 @@ de código entre MS). No se mutan los .avsc.
 from infraestructura.schema.v1.eventos import (
     Dinero,
     EstadoDeHabilitacionCambiadoPayload,
+    EventoAsignacionConfirmadaPorHabilitacion,
     EventoAsignacionRechazadaPorHabilitacion,
     EventoEstadoDeHabilitacionCambiado,
     EventoReglaDePartnerActualizada,
@@ -18,12 +19,14 @@ from infraestructura.schema.v1.eventos import (
     TrabajoCreadoPayload,
     TrabajoRechazadoPayload,
     AsignacionRechazadaPorHabilitacionPayload,
+    AsignacionConfirmadaPorHabilitacionPayload,
 )
 
 __all__ = [
     "Dinero",
     "EstadoDeHabilitacionCambiadoPayload",
     "EventoAsignacionRechazadaPorHabilitacion",
+    "EventoAsignacionConfirmadaPorHabilitacion",
     "EventoEstadoDeHabilitacionCambiado",
     "EventoReglaDePartnerActualizada",
     "EventoTrabajoAsignado",
@@ -34,4 +37,5 @@ __all__ = [
     "TrabajoCreadoPayload",
     "TrabajoRechazadoPayload",
     "AsignacionRechazadaPorHabilitacionPayload",
+    "AsignacionConfirmadaPorHabilitacionPayload",
 ]

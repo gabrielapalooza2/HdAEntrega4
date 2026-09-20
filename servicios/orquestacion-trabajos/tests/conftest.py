@@ -41,6 +41,6 @@ def limpia(base):
     dependen del orden en que corran.
     """
     with base.pool().connection() as con:
-        con.execute("TRUNCATE eventos_trabajo, outbox, proyeccion_regla_partner, "
-                    "proyeccion_trabajo, mensajes_procesados")
+        con.execute("TRUNCATE saga_paso, saga_asignacion, eventos_trabajo, outbox, "
+                    "proyeccion_regla_partner, proyeccion_trabajo, mensajes_procesados")
     return base

@@ -33,10 +33,20 @@ class EstadoDeHabilitacionCambiado(EventoIntegracion):
 
 @dataclass
 class AsignacionRechazadaPorHabilitacion(EventoIntegracion):
-    """Compensacion de la saga. Topico evt.habilitaciones."""
+    """Compensacion de la saga. Topico evt.asignaciones."""
     trabajo_id: str = None
     asignacion_id: str = None
     proveedor_id: str = None
     estado_real: str = None
     motivo: str = None
+    verificado_en: datetime = field(default_factory=ahora)
+
+
+@dataclass
+class AsignacionConfirmadaPorHabilitacion(EventoIntegracion):
+    """Cierre feliz de la saga. Topico evt.asignaciones."""
+    trabajo_id: str = None
+    asignacion_id: str = None
+    proveedor_id: str = None
+    estado_real: str = None
     verificado_en: datetime = field(default_factory=ahora)

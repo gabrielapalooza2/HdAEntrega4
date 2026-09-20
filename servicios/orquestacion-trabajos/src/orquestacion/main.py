@@ -18,6 +18,7 @@ from flask import Flask
 
 from orquestacion import config
 from orquestacion.infraestructura import barrido
+from orquestacion.infraestructura.api import sagas as api_sagas
 from orquestacion.infraestructura.api import trabajos as api_trabajos
 from orquestacion.infraestructura.mensajeria import consumidores, publicador
 from orquestacion.infraestructura.persistencia import bd
@@ -45,6 +46,7 @@ def create_app() -> Flask:
     barrido.arrancar(_parar)
 
     app.register_blueprint(api_trabajos.bp)
+    app.register_blueprint(api_sagas.bp)
 
     @app.get("/health")
     def health():

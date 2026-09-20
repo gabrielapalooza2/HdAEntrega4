@@ -57,14 +57,25 @@ def drenar_outbox(despachador, limite: int = 100) -> int:
     )
 
     publicados = 0
+    from .saga_contratos import TIPOS_SAGA
+
     for fila in pendientes:
         try:
-            despachador.publicar_evento_regla(
-                payload=fila.payload,
-                clave=fila.clave,
-                correlation_id=fila.correlation_id,
-                topico=fila.topico,
-            )
+            if fila.tipo in TIPOS_SAGA:
+                despachador.publicar_evento_saga(
+                    tipo=fila.tipo,
+                    payload=fila.payload,
+                    clave=fila.clave,
+                    correlation_id=fila.correlation_id,
+                    topico=fila.topico,
+                )
+            else:
+                despachador.publicar_evento_regla(
+                    payload=fila.payload,
+                    clave=fila.clave,
+                    correlation_id=fila.correlation_id,
+                    topico=fila.topico,
+                )
             fila.publicado = True
             fila.fecha_publicacion = datetime.utcnow()
             publicados += 1

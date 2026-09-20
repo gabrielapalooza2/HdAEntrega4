@@ -167,6 +167,31 @@ def test_los_excluidos_se_acumulan_para_que_no_se_repita_el_proveedor():
     assert set(siguientes[1].proveedores_excluidos) == {"PROV_1", "PROV_2"}
 
 
+def test_compensar_una_asignacion_optimista_vuelve_a_creado():
+    """La saga de Entrega 5: ASIGNADO no es irreversible.
+
+    Emparejamiento asigno contra su proyeccion. Acreditacion, duena del dato
+    autoritativo, rechaza. El agregado deshace la asignacion: el SLA no se
+    cumplio de verdad, el reloj tiene que seguir.
+    """
+    trabajo = _trabajo_creado()
+    for e in dom.decidir_asignacion(trabajo, proveedor_id="PROV_1", asignacion_id="a-1"):
+        trabajo.aplicar(e)
+    assert trabajo.estado is EstadoTrabajo.ASIGNADO
+    assert trabajo.proveedor_id == "PROV_1"
+
+    nuevos = dom.decidir_rechazo_de_habilitacion(
+        trabajo, proveedor_id="PROV_1", motivo="SUSPENDIDO", max_intentos=3)
+    for e in nuevos:
+        trabajo.aplicar(e)
+
+    assert trabajo.estado is EstadoTrabajo.CREADO
+    assert trabajo.proveedor_id is None
+    assert trabajo.proveedores_excluidos == ("PROV_1",)
+    assert isinstance(nuevos[0], ev.ProveedorDescartado)
+    assert isinstance(nuevos[1], ev.ReasignacionSolicitada)
+
+
 # ═════════════════════════════════════════════════ ESCENARIO: SLA y reloj ══
 
 def test_asignar_detiene_el_reloj_del_sla():

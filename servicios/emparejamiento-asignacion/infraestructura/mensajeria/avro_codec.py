@@ -7,6 +7,7 @@ from typing import Any, Optional
 from pulsar.schema import AvroSchema, Record
 
 from infraestructura.schema.v1.eventos import (
+    EventoAsignacionConfirmadaPorHabilitacion,
     EventoAsignacionRechazadaPorHabilitacion,
     EventoEstadoDeHabilitacionCambiado,
     EventoReglaDePartnerActualizada,
@@ -22,6 +23,7 @@ CLASES_POR_TIPO = {
     "TrabajoRechazado": EventoTrabajoRechazado,
     "TrabajoAsignado": EventoTrabajoAsignado,
     "AsignacionRechazadaPorHabilitacion": EventoAsignacionRechazadaPorHabilitacion,
+    "AsignacionConfirmadaPorHabilitacion": EventoAsignacionConfirmadaPorHabilitacion,
 }
 
 
@@ -79,7 +81,11 @@ def decode_tipo(tipo: str, data: bytes) -> dict:
 
 
 def decode_evt_trabajos(data: bytes, avscs: dict[str, dict]) -> Optional[dict]:
-    """evt.trabajos es multi-tipo. Prueba cada .avsc oficial y filtra por type."""
+    """Tópico multi-tipo. Prueba cada .avsc oficial y filtra por type."""
+    return decode_multi_tipo(data, avscs)
+
+
+def decode_multi_tipo(data: bytes, avscs: dict[str, dict]) -> Optional[dict]:
     for tipo, avsc in avscs.items():
         try:
             rec = decode_avro(avsc, data)

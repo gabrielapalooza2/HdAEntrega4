@@ -13,12 +13,14 @@ from infraestructura.mensajeria.avro_codec import (
     cargar_avsc,
     decode_avro,
     decode_evt_trabajos,
+    decode_multi_tipo,
     encode_avro,
     record_to_plain,
     schema_pulsar,
 )
 from dominio.modelo import TrabajoAsignado
 from infraestructura.schema.v1.eventos import (
+    EventoAsignacionConfirmadaPorHabilitacion,
     EventoAsignacionRechazadaPorHabilitacion,
     EventoEstadoDeHabilitacionCambiado,
     EventoReglaDePartnerActualizada,
@@ -57,7 +59,14 @@ class PublicadorTrabajoAsignadoPulsar:
         payload = evento.a_dict()
         clave = evento.trabajo_id
         with self._lock:
-            self._producer.send(encode_avro(self._avsc, payload), partition_key=clave)
+            self._producer.send(
+                encode_avro(self._avsc, payload),
+                partition_key=clave,
+                properties={
+                    "type": evento.type,
+                    "correlation_id": evento.correlation_id,
+                },
+            )
             log.info(
                 "publicado TrabajoAsignado trabajo_id=%s asignacion_id=%s proveedor_id=%s",
                 evento.trabajo_id,
@@ -75,12 +84,14 @@ class ConsumidoresPulsar:
         on_habilitacion: Callable,
         on_trabajos: Callable,
         on_rechazo: Callable,
+        on_confirmacion: Callable,
     ) -> None:
         self._client = client
         self._on_regla = on_regla
         self._on_habilitacion = on_habilitacion
         self._on_trabajos = on_trabajos
         self._on_rechazo = on_rechazo
+        self._on_confirmacion = on_confirmacion
         self._stop = threading.Event()
         self._hilos: list[threading.Thread] = []
         self._consumers: list[pulsar.Consumer] = []
@@ -93,10 +104,25 @@ class ConsumidoresPulsar:
         self.avsc_rechazo = cargar_avsc(
             contratos_dir, "evt.asignaciones", "AsignacionRechazadaPorHabilitacion"
         )
+        self.avsc_confirmacion = cargar_avsc(
+            contratos_dir, "evt.asignaciones", "AsignacionConfirmadaPorHabilitacion"
+        )
+        self.avsc_regla_ok = cargar_avsc(
+            contratos_dir, "evt.asignaciones", "AsignacionAceptadaPorReglaPartner"
+        )
+        self.avsc_regla_ko = cargar_avsc(
+            contratos_dir, "evt.asignaciones", "AsignacionRechazadaPorReglaPartner"
+        )
         self._avsc_trabajos = {
             "TrabajoCreado": self.avsc_creado,
             "TrabajoAsignado": self.avsc_asignado,
             "TrabajoRechazado": self.avsc_rechazado,
+        }
+        self._avsc_asignaciones = {
+            "AsignacionRechazadaPorHabilitacion": self.avsc_rechazo,
+            "AsignacionConfirmadaPorHabilitacion": self.avsc_confirmacion,
+            "AsignacionAceptadaPorReglaPartner": self.avsc_regla_ok,
+            "AsignacionRechazadaPorReglaPartner": self.avsc_regla_ko,
         }
 
     def arrancar(self) -> None:
@@ -106,7 +132,7 @@ class ConsumidoresPulsar:
             (TOPIC_PARTNERS, SUB_PARTNERS, True, self.avsc_regla, self._manejar_regla),
             (TOPIC_PROVEEDORES, SUB_PROVEEDORES, True, self.avsc_hab, self._manejar_habilitacion),
             (TOPIC_TRABAJOS, SUB_TRABAJOS, False, None, self._manejar_trabajos),
-            (TOPIC_ASIGNACIONES, SUB_ASIGNACIONES, False, self.avsc_rechazo, self._manejar_rechazo),
+            (TOPIC_ASIGNACIONES, SUB_ASIGNACIONES, False, None, self._manejar_asignaciones),
         ]
         for topic, sub, shared_ok, avsc, handler in specs:
             consumer = self._subscribe(topic, sub, prefer_key_shared=not shared_ok, avsc=avsc)
@@ -198,8 +224,25 @@ class ConsumidoresPulsar:
             return
         self._on_trabajos(payload)
 
-    def _manejar_rechazo(self, msg: pulsar.Message) -> None:
-        self._on_rechazo(self._payload(msg, self.avsc_rechazo))
+    def _manejar_asignaciones(self, msg: pulsar.Message) -> None:
+        payload = decode_multi_tipo(bytes(msg.data()), self._avsc_asignaciones)
+        if payload is None:
+            valor = msg.value()
+            if isinstance(valor, dict):
+                payload = record_to_plain(valor)
+            elif valor is not None and not isinstance(valor, (bytes, bytearray)):
+                payload = record_to_plain(valor)
+        if payload is None:
+            log.warning("evt.asignaciones no decodificable; ack y skip")
+            return
+        tipo = payload.get("type")
+        if tipo == "AsignacionConfirmadaPorHabilitacion":
+            self._on_confirmacion(payload)
+            return
+        if tipo in ("AsignacionRechazadaPorHabilitacion", "AsignacionRechazadaPorReglaPartner"):
+            self._on_rechazo(payload)
+            return
+        # AsignacionAceptadaPorReglaPartner: el siguiente paso es de Acreditacion.
 
 
 # Referencias para que el schema registry de tópicos de un solo tipo
@@ -207,3 +250,4 @@ class ConsumidoresPulsar:
 RECORD_REGLA = EventoReglaDePartnerActualizada
 RECORD_HABILITACION = EventoEstadoDeHabilitacionCambiado
 RECORD_RECHAZO = EventoAsignacionRechazadaPorHabilitacion
+RECORD_CONFIRMACION = EventoAsignacionConfirmadaPorHabilitacion

@@ -38,11 +38,17 @@ from enum import Enum
 class EstadoTrabajo(str, Enum):
     """Ciclo de vida de RESPUESTA del trabajo.
 
-        CREADO ──> ASIGNADO           (terminal: el SLA de respuesta se cumplio)
-           │
-           └─────> ESCALADO_MANUAL    (terminal: 3 intentos, o SLA vencido)
+        CREADO ──> ASIGNADO           (SLA de respuesta se detiene)
+           ^            │
+           └─compensacion (ProveedorDescartado)
+                        │
+                        └────> ESCALADO_MANUAL  (3 intentos, o SLA vencido)
 
-        RECHAZADO                     (terminal: la regla del partner no cubre)
+        RECHAZADO                     (la regla del partner no cubre)
+
+    ASIGNADO es terminal para el barrido de SLA solo mientras no haya
+    compensacion. Si Acreditacion revierte la asignacion, el trabajo vuelve
+    a CREADO y el reloj sigue: el SLA no se cumplio de verdad.
     """
     CREADO = "CREADO"
     ASIGNADO = "ASIGNADO"
