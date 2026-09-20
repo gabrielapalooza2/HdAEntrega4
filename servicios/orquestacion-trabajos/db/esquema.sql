@@ -139,3 +139,53 @@ CREATE TABLE IF NOT EXISTS mensajes_procesados (
   message_id   UUID PRIMARY KEY,
   procesado_en TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ══════════════════════════════════════════════════════════════ SAGA LOG ══
+-- Proyeccion OBSERVADORA de la transaccion larga de asignacion.
+-- No es un orquestador: no emite comandos. Vive en esta base porque el
+-- identificador de la saga ES el trabajo_id, y este servicio ya reconstruye
+-- esa historia. Un quinto microservicio solo para el log anadiria un
+-- deployable que no es dueño de ningun agregado.
+--
+-- saga_asignacion  una fila por transaccion larga (estado actual)
+-- saga_paso        append-only: cada mensaje de la coreografia y cada
+--                  compensacion, para que un tutor pueda seguir el workflow
+--                  con SQL.
+CREATE TABLE IF NOT EXISTS saga_asignacion (
+  saga_id        UUID PRIMARY KEY,
+  correlation_id TEXT NOT NULL,
+  estado         TEXT NOT NULL,
+  partner_id     TEXT,
+  proveedor_id   TEXT,
+  asignacion_id  TEXT,
+  paso_actual    TEXT NOT NULL,
+  motivo         TEXT,
+  iniciada_en    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizada_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cerrada_en     TIMESTAMPTZ,
+  CONSTRAINT saga_asignacion_estado_chk CHECK (estado IN (
+    'INICIADA', 'EN_CURSO', 'COMPLETADA', 'COMPENSADA', 'FALLIDA'
+  ))
+);
+
+CREATE TABLE IF NOT EXISTS saga_paso (
+  id           BIGSERIAL PRIMARY KEY,
+  saga_id      UUID NOT NULL REFERENCES saga_asignacion (saga_id),
+  secuencia    INT  NOT NULL,
+  servicio     TEXT NOT NULL,
+  tipo_mensaje TEXT NOT NULL,
+  rol          TEXT NOT NULL,
+  resultado    TEXT NOT NULL,
+  payload      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ocurrido_en  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT saga_paso_rol_chk CHECK (rol IN (
+    'PASO', 'COMPENSACION', 'CIERRE'
+  )),
+  CONSTRAINT saga_paso_unico UNIQUE (saga_id, secuencia)
+);
+
+CREATE INDEX IF NOT EXISTS ix_saga_asignacion_estado
+  ON saga_asignacion (estado, actualizada_en DESC);
+
+CREATE INDEX IF NOT EXISTS ix_saga_paso_timeline
+  ON saga_paso (saga_id, secuencia);

@@ -83,7 +83,7 @@ def de_ms(milis: int | None) -> datetime | None:
 # ═══════════════════════════════════════════════════════ esquemas Avro ═════
 
 # tipo de mensaje -> carpeta de esquemas (que coincide con el topico corto).
-# Los SIETE tipos que este servicio toca tienen .avsc publicado, incluido
+# Los OCHO tipos que este servicio toca tienen .avsc publicado, incluido
 # CrearTrabajo. La regla del equipo es: hay .avsc -> Avro binario; no hay ->
 # JSON provisional. Hoy no queda ninguno en el segundo caso.
 CARPETA_DE_TIPO = {
@@ -93,6 +93,7 @@ CARPETA_DE_TIPO = {
     "TrabajoRechazado":                   "evt.trabajos",
     "TrabajoAsignado":                    "evt.trabajos",
     "AsignacionRechazadaPorHabilitacion": "evt.asignaciones",
+    "AsignacionConfirmadaPorHabilitacion": "evt.asignaciones",
     "AsignarProveedor":                   "cmd.emparejamiento",
 }
 
@@ -110,7 +111,7 @@ def cargar_avsc(tipo: str) -> dict:
     return parse_schema(json.loads(ruta.read_text(encoding="utf-8")))
 
 
-# El sobre es un PREFIJO POSICIONAL comun a los siete esquemas: los mismos ocho
+# El sobre es un PREFIJO POSICIONAL comun a los ocho esquemas: los mismos ocho
 # campos, en el mismo orden, antes de `data`. Avro binario es posicional y no
 # lleva nombres de campo en el cable, asi que se puede leer el sobre SIN SABER
 # TODAVIA que tipo viene, parar ahi, mirar `type` y recien entonces decodificar
@@ -512,6 +513,43 @@ class AsignacionRechazadaPorHabilitacion(_Mensaje):
         )
 
 
+@dataclass
+class AsignacionConfirmadaPorHabilitacion(_Mensaje):
+    """Evento de Acreditacion, en evt.asignaciones.
+
+    Cierra la transaccion larga: el dato autoritativo coincidio con la
+    asignacion optimista. No muta el agregado Trabajo (ya esta ASIGNADO);
+    solo cierra el saga log.
+    """
+    TIPO: ClassVar[str] = "AsignacionConfirmadaPorHabilitacion"
+    TOPICO: ClassVar[str] = TOPICO_EVT_ASIGNACIONES
+
+    trabajo_id: str = ""
+    asignacion_id: str = ""
+    proveedor_id: str = ""
+    estado_real: str = ""
+    verificado_en: datetime | None = None
+
+    def a_datos(self) -> dict:
+        return {
+            "trabajo_id": self.trabajo_id,
+            "asignacion_id": self.asignacion_id,
+            "proveedor_id": self.proveedor_id,
+            "estado_real": self.estado_real,
+            "verificado_en": a_ms(self.verificado_en) or ahora_ms(),
+        }
+
+    @classmethod
+    def desde_datos(cls, d: dict) -> "AsignacionConfirmadaPorHabilitacion":
+        return cls(
+            trabajo_id=d.get("trabajo_id") or "",
+            asignacion_id=d.get("asignacion_id") or "",
+            proveedor_id=d.get("proveedor_id") or "",
+            estado_real=d.get("estado_real") or "",
+            verificado_en=de_ms(d.get("verificado_en")),
+        )
+
+
 # ─────────────────────────────────────────────────────────────── salientes ──
 
 @dataclass
@@ -660,6 +698,7 @@ MENSAJES_ENTRANTES = (
     ReglaDePartnerActualizada,
     TrabajoAsignado,
     AsignacionRechazadaPorHabilitacion,
+    AsignacionConfirmadaPorHabilitacion,
 )
 
 MENSAJES_SALIENTES = (

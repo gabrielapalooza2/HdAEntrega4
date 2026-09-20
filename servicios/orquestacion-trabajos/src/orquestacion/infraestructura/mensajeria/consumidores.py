@@ -191,6 +191,8 @@ def suscripciones() -> list[Suscripcion]:
             manejadores={
                 c.AsignacionRechazadaPorHabilitacion.TIPO:
                     aplicacion_trabajos.manejar_asignacion_rechazada,
+                c.AsignacionConfirmadaPorHabilitacion.TIPO:
+                    aplicacion_trabajos.manejar_asignacion_confirmada,
             },
         ),
     ]

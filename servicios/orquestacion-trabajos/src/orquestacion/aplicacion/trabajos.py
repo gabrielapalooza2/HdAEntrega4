@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from orquestacion import config
 from orquestacion.dominio import eventos as ev
 from orquestacion.dominio import trabajo as dominio
-from orquestacion.infraestructura.persistencia import bd, eventos as almacen, outbox, reglas, trabajos
+from orquestacion.infraestructura.persistencia import bd, eventos as almacen, outbox, reglas, saga_log, trabajos
 from orquestacion.mensajeria import contratos as c
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,28 @@ def _confirmar(cur, trabajo_id: str, eventos_nuevos: list[ev.EventoDeDominio],
     trabajos.sincronizar(cur, trabajo)
 
     _publicar(cur, eventos_nuevos, trabajo=trabajo, correlation_id=correlation_id)
+    _proyectar_saga(cur, trabajo, eventos_nuevos, correlation_id=correlation_id)
     return trabajo
+
+
+def _proyectar_saga(cur, trabajo: dominio.Trabajo,
+                    eventos_nuevos: list[ev.EventoDeDominio], *,
+                    correlation_id: str) -> None:
+    """El saga log es una proyeccion, no un orquestador.
+
+    Se escribe en la MISMA transaccion que el event store. Si el commit falla,
+    el tutor no ve un paso de saga sin el hecho de dominio.
+    """
+    for evento in eventos_nuevos:
+        if isinstance(evento, ev.TrabajoCreado):
+            saga_log.iniciar(
+                cur, trabajo_id=evento.trabajo_id,
+                correlation_id=correlation_id, partner_id=evento.partner_id)
+        elif isinstance(evento, ev.ProveedorAsignado):
+            saga_log.marcar_asignacion_optimista(
+                cur, trabajo_id=evento.trabajo_id,
+                correlation_id=correlation_id, proveedor_id=evento.proveedor_id,
+                asignacion_id=evento.asignacion_id)
 
 
 # ═════════════════════════════════════════════════════════ CrearTrabajo ════
@@ -236,6 +257,17 @@ def manejar_asignacion_rechazada(sobre: c.Sobre) -> None:
                    secuencia_actual=trabajo.secuencia,
                    correlation_id=sobre.correlation_id)
 
+        saga_log.marcar_compensacion(
+            cur, trabajo_id=mensaje.trabajo_id,
+            correlation_id=sobre.correlation_id,
+            proveedor_id=mensaje.proveedor_id,
+            asignacion_id=mensaje.asignacion_id,
+            motivo=mensaje.motivo or mensaje.estado_real,
+            estado_trabajo=dominio.Trabajo.reconstruir(
+                mensaje.trabajo_id, almacen.leer(cur, mensaje.trabajo_id)
+            ).estado.value,
+        )
+
     for evento in nuevos:
         if isinstance(evento, ev.ReasignacionSolicitada):
             logger.info("Trabajo %s: intento %s, se pide otro proveedor "
@@ -244,6 +276,37 @@ def manejar_asignacion_rechazada(sobre: c.Sobre) -> None:
         elif isinstance(evento, ev.TrabajoEscalado):
             logger.warning("Trabajo %s ESCALADO_MANUAL: %s | %s",
                            mensaje.trabajo_id, evento.motivo, evento.detalle)
+
+
+# ════════════════════════════ AsignacionConfirmadaPorHabilitacion ══════════
+
+def manejar_asignacion_confirmada(sobre: c.Sobre) -> None:
+    """evt.asignaciones -> cierra la saga. El agregado ya esta ASIGNADO."""
+    mensaje: c.AsignacionConfirmadaPorHabilitacion = sobre.contenido()
+
+    with bd.pool().connection() as con, con.cursor() as cur:
+        if not bd.reclamar_mensaje(cur, sobre.id):
+            logger.info("AsignacionConfirmada: sobre %s repetido, se descarta",
+                        sobre.id)
+            return
+
+        historia = almacen.leer(cur, mensaje.trabajo_id)
+        trabajo = dominio.Trabajo.reconstruir(mensaje.trabajo_id, historia)
+        if not trabajo.existe:
+            raise LookupError(
+                f"AsignacionConfirmada para {mensaje.trabajo_id}, que aun no "
+                f"existe en el event store; se devuelve al broker")
+
+        saga_log.marcar_confirmada(
+            cur, trabajo_id=mensaje.trabajo_id,
+            correlation_id=sobre.correlation_id,
+            proveedor_id=mensaje.proveedor_id,
+            asignacion_id=mensaje.asignacion_id,
+            estado_real=mensaje.estado_real,
+        )
+
+    logger.info("Trabajo %s: habilitacion CONFIRMADA para %s",
+                mensaje.trabajo_id, mensaje.proveedor_id)
 
 
 # ══════════════════════════════════════════════════════ barrido de SLA ═════

@@ -312,6 +312,61 @@ def test_el_tope_de_tres_intentos_escala(limpia):
     assert set(comandos[1].data["excluir_proveedores"]) == {"PROV_1", "PROV_2"}
 
 
+def sobre_confirmacion(tid, proveedor, asignacion_id="a-ok"):
+    return c.empaquetar(
+        c.AsignacionConfirmadaPorHabilitacion(
+            trabajo_id=tid, proveedor_id=proveedor, estado_real="HABILITADO",
+            asignacion_id=asignacion_id,
+            verificado_en=datetime.now(timezone.utc)),
+        service_name="acreditacion-habilitacion")
+
+
+def test_camino_feliz_cierra_la_saga_como_completada(limpia):
+    """Transaccion larga exitosa: crear -> asignar -> confirmar."""
+    tid = _crear_y_devolver_id(limpia)
+    aplicacion.manejar_trabajo_asignado(c.empaquetar(
+        c.TrabajoAsignado(trabajo_id=tid, proveedor_id="PROV_OK",
+                          asignacion_id="asig-ok"),
+        service_name="emparejamiento-asignacion"))
+    aplicacion.manejar_asignacion_confirmada(sobre_confirmacion(tid, "PROV_OK", "asig-ok"))
+
+    saga = filas(limpia, "SELECT estado, proveedor_id, paso_actual FROM "
+                         "saga_asignacion WHERE saga_id = %s", (tid,))
+    assert saga == [("COMPLETADA", "PROV_OK", "AsignacionConfirmadaPorHabilitacion")]
+
+    pasos = filas(limpia, "SELECT secuencia, servicio, tipo_mensaje, rol, resultado "
+                          "FROM saga_paso WHERE saga_id = %s ORDER BY secuencia", (tid,))
+    assert [p[2] for p in pasos] == [
+        "TrabajoCreado", "TrabajoAsignado", "AsignacionConfirmadaPorHabilitacion"]
+    assert pasos[-1][3:] == ("CIERRE", "CONFIRMADO")
+    assert filas(limpia, "SELECT estado FROM proyeccion_trabajo WHERE trabajo_id = %s",
+                 (tid,))[0][0] == "ASIGNADO"
+
+
+def test_rechazo_de_habilitacion_compensa_y_queda_en_el_saga_log(limpia):
+    """Fallo que dispara compensacion: la asignacion optimista se deshace."""
+    tid = _crear_y_devolver_id(limpia)
+    aplicacion.manejar_trabajo_asignado(c.empaquetar(
+        c.TrabajoAsignado(trabajo_id=tid, proveedor_id="PROV_MAL",
+                          asignacion_id="asig-mal"),
+        service_name="emparejamiento-asignacion"))
+    aplicacion.manejar_asignacion_rechazada(sobre_rechazo(tid, "PROV_MAL"))
+
+    vista = filas(limpia, "SELECT estado, proveedor_id FROM proyeccion_trabajo "
+                          "WHERE trabajo_id = %s", (tid,))
+    assert vista == [("CREADO", None)]
+
+    saga = filas(limpia, "SELECT estado, motivo FROM saga_asignacion WHERE saga_id = %s",
+                 (tid,))
+    assert saga[0][0] == "COMPENSADA"
+    assert "LICENCIA_VENCIDA" in saga[0][1]
+
+    roles = [f[0] for f in filas(
+        limpia, "SELECT rol FROM saga_paso WHERE saga_id = %s ORDER BY secuencia", (tid,))]
+    assert roles.count("COMPENSACION") == 2
+    assert "PASO" in roles
+
+
 def test_los_excluidos_viajan_en_el_comando(limpia):
     """Emparejamiento no puede leer nuestra base: el estado necesario para
     decidir va EN EL MENSAJE."""

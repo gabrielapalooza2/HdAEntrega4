@@ -33,6 +33,10 @@ TODOS = [
                                          # RECIBIMOS este mensaje, y a_datos() existe para que
                                          # scripts/publicar.py pueda simularlo.
                                          verificado_en=datetime(2026, 9, 14, 11, 0, tzinfo=timezone.utc)),
+    c.AsignacionConfirmadaPorHabilitacion(trabajo_id="11111111-1111-1111-1111-111111111111",
+                                          asignacion_id="a-1", proveedor_id="PROV_9",
+                                          estado_real="HABILITADO",
+                                          verificado_en=datetime(2026, 9, 14, 11, 0, tzinfo=timezone.utc)),
     c.TrabajoCreado(trabajo_id="11111111-1111-1111-1111-111111111111",
                     partner_id="SEGUROS_ANDES", mercado_id="BOG", categoria="PLOMERIA",
                     urgencia="ALTA", zona="BOGOTA", sla_minutos=120, requiere_aprobacion=False),
