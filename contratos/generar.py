@@ -317,6 +317,30 @@ class EventoAsignacionRechazadaPorHabilitacion(Record):
     data = AsignacionRechazadaPorHabilitacionPayload()
 
 
+class AsignacionConfirmadaPorHabilitacionPayload(Record):
+    """CIERRE FELIZ DE LA SAGA.
+
+    Simetrico al rechazo: Acreditacion es el unico dueno del dato autoritativo
+    de habilitacion. Sin este evento la transaccion larga quedaria EN_CURSO
+    para siempre, esperando un silencio que ningun broker reporta.
+    """
+    trabajo_id = String()
+    asignacion_id = String()
+    proveedor_id = String()
+    estado_real = String()
+    verificado_en = Long()
+
+
+class EventoAsignacionConfirmadaPorHabilitacion(Record):
+    """evt.asignaciones (clave=trabajo_id) ← Acreditacion.
+    Consumen: Orquestacion (cierra el saga log) y Emparejamiento (CONFIRMADO)."""
+    id = String(); time = Long(); ingestion = Long()
+    specversion = String(default="v1")
+    type = String(default="AsignacionConfirmadaPorHabilitacion")
+    datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
+    data = AsignacionConfirmadaPorHabilitacionPayload()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 CATALOGO = {
     # flujo A — administrativo
@@ -334,6 +358,8 @@ CATALOGO = {
     "evt.trabajos/TrabajoAsignado.avsc":                EventoTrabajoAsignado,
     "evt.asignaciones/AsignacionRechazadaPorHabilitacion.avsc":
         EventoAsignacionRechazadaPorHabilitacion,
+    "evt.asignaciones/AsignacionConfirmadaPorHabilitacion.avsc":
+        EventoAsignacionConfirmadaPorHabilitacion,
 }
 
 if __name__ == "__main__":
