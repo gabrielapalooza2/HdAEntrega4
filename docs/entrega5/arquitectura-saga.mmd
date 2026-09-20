@@ -1,0 +1,41 @@
+﻿sequenceDiagram
+    autonumber
+    actor Portal
+    participant OT as Orquestacion de trabajos (coordinador)
+    participant Log as saga_asignacion / saga_paso
+    participant EA as Emparejamiento
+    participant MR as Motor de reglas partner
+    participant AH as Acreditacion
+
+    Note over OT: Coordinador de sagas: log local. Sin comandos.
+
+    Portal->>OT: CrearTrabajo (cmd.trabajos)
+    OT->>Log: INICIADA · TrabajoCreado
+    OT->>EA: TrabajoCreado (evt.trabajos)
+    EA->>EA: matching contra proyeccion local
+    EA->>MR: TrabajoAsignado (evt.trabajos)
+    EA->>OT: TrabajoAsignado (mismo hecho)
+    OT->>Log: EN_CURSO · TrabajoAsignado
+    MR->>MR: red homologada viva (agregado Partner)
+
+    alt proveedor en la red
+        MR->>AH: AsignacionAceptadaPorReglaPartner (evt.asignaciones)
+        MR->>OT: mismo hecho
+        OT->>Log: PASO Motor
+        alt habilitado
+            AH->>OT: AsignacionConfirmadaPorHabilitacion
+            AH->>EA: mismo hecho
+            OT->>Log: COMPLETADA
+        else no habilitado
+            AH->>EA: AsignacionRechazadaPorHabilitacion
+            AH->>OT: mismo hecho
+            OT->>OT: ProveedorDescartado (Trabajo vuelve a CREADO)
+            OT->>Log: COMPENSADA
+            Note over OT: No publica AsignarProveedor
+        end
+    else fuera de la red
+        MR->>EA: AsignacionRechazadaPorReglaPartner
+        MR->>OT: mismo hecho
+        OT->>OT: ProveedorDescartado
+        OT->>Log: COMPENSADA (paso Motor)
+    end
