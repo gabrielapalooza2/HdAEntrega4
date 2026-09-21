@@ -363,6 +363,11 @@ Correspondencia de estados:
 | 4 | `motor-reglas-partner` publica en `eventos-partner` y consume `comandos-partner`; el script de tópicos crea `evt.partners` y `cmd.partners` | **Los nombres no coinciden**: ese servicio no se comunica con nadie |
 | 5 | `emparejamiento-asignacion` y `acreditacion-habilitacion` están en el compose pero no existen en `servicios/` | `make servicios` falla |
 
+Entrega 5 (saga): Acreditación publica confirmación y rechazo en
+`evt.asignaciones`. El saga log es una proyección en `db-trabajos`, no un
+quinto servicio. Detalle en `docs/entrega5/arquitectura-saga.md`.
+
+
 
 ---
 

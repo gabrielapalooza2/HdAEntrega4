@@ -18,6 +18,7 @@ servicios; este directorio solo contiene lo propio.
 | 5 | Reasignación con tope de 3 intentos | ✅ |
 | 6 | Barrido de SLA | ✅ |
 | 7 | Pruebas de los escenarios | ✅ |
+| 8 | Saga log de la asignación (proyección, no orquestador) | ✅ |
 
 ## Levantar
 
@@ -197,7 +198,7 @@ mensaje: el consumidor discrimina por el campo `type` del sobre.
 | `cmd.trabajos` | `CrearTrabajo` | 3 | Failover |
 | `evt.partners` | `ReglaDePartnerActualizada` | 0, compactado | **Failover** (ver abajo) |
 | `evt.trabajos` | `TrabajoAsignado` | 3 | Key_Shared |
-| `evt.asignaciones` | `AsignacionRechazadaPorHabilitacion` | 3 | Shared |
+| `evt.asignaciones` | `AsignacionRechazadaPorHabilitacion`, `AsignacionConfirmadaPorHabilitacion` | 3 | Shared |
 
 **Publica**
 

@@ -91,7 +91,7 @@ Puertos en el host.
 | Postgres de emparejamiento | 5434 | 5432 |
 | Postgres de acreditación | 5435 | 5432 |
 
-Las HTTP de los microservicios son para un operador, un BFF o una demostración. No son el canal entre servicios.
+Las HTTP de los microservicios son para un operador, un BFF o una demostración. No son el canal entre servicios. Orquestación expone `GET /sagas` y `GET /sagas/{id}` para mirar el saga log sin entrar a `psql`.
 
 ### Bajar y limpiar
 
@@ -184,6 +184,8 @@ HTTP en `http://localhost:5001`.
 |---|---|---|
 | GET | `/health` | liveness |
 | GET | `/trabajos/{id}/estado` | lado Q de CQRS. Header `X-Proyeccion-Secuencia` |
+| GET | `/sagas` | saga log. `?estado=COMPLETADA` o `COMPENSADA` |
+| GET | `/sagas/{trabajo_id}` | timeline de una transacción larga |
 
 El Dockerfile usa un solo worker de gunicorn. El relay del outbox, los consumidores y el barrido son hilos del mismo proceso. Para escalar se suben réplicas del contenedor, no workers.
 
@@ -227,7 +229,7 @@ HTTP en `http://localhost:5004`.
 | POST | `/proveedores/{id}/verificar-antecedentes` | demo del circuit breaker |
 | POST | `/admin/simular-falla-policia` | `{"activa": true}` fuerza timeout en el stub |
 
-El código de Acreditación publica el rechazo en `persistent://hda/poc/evt.habilitaciones`. Orquestación y Emparejamiento lo leen de `evt.asignaciones`, que es el tópico del contrato en `contratos/esquemas/`. `scripts/crear_topicos.sh` no crea `evt.habilitaciones`. Si la demo de rechazo no cierra de punta a punta, mira esa divergencia primero.
+Acreditación publica confirmación y rechazo de habilitación en `evt.asignaciones`. Ese es el tópico del contrato. El rechazo es la compensación de la saga; la confirmación cierra el camino feliz. El saga log y el diagrama están en `docs/entrega5/arquitectura-saga.md`.
 
 ## Contratos y mensajería
 
@@ -359,7 +361,23 @@ No hay un script de demo único. Las pruebas de Orquestación cubren el comporta
 - Tres rechazos de habilitación. el tercero escala. Tope `MAX_INTENTOS_ASIGNACION=3`.
 - El barrido pasa a `ESCALADO_MANUAL` cuando vence el SLA y el estado no es terminal.
 
-Orquestación publica `AsignarProveedor` en `cmd.emparejamiento`. Emparejamiento no lo consume. La rama de reasignación no cierra de punta a punta hasta que ese comando tenga dueño. El camino feliz sí cierra. `CrearTrabajo` → `TrabajoCreado` → matching → `TrabajoAsignado` → estado `ASIGNADO`.
+Orquestación **no** publica `AsignarProveedor` en la saga: Emparejamiento no
+lo consume y mandarlo rompería la coreografía. El camino feliz cierra
+`CrearTrabajo` → `TrabajoCreado` → matching → `TrabajoAsignado` → Motor
+acepta la red homologada → Acreditación confirma → estado `ASIGNADO`.
+
+## Entrega 5. saga de asignación
+
+Coreografía entre **cuatro** servicios: Orquestación (coordinador de sagas +
+log), Emparejamiento, Motor de reglas partner y Acreditación. El saga log
+vive en `db-trabajos` (tablas `saga_asignacion` y `saga_paso`, columna
+`coordinador`). Decisión, diagrama e imagen: `docs/entrega5/arquitectura-saga.md`.
+
+```bash
+make todo
+make demo-saga
+docker exec -i db-trabajos psql -U trabajos -d trabajos < scripts/consulta_saga.sql
+```
 
 ## Cómo correr las pruebas
 
@@ -369,7 +387,7 @@ Desde la raíz, con Make y Python en el PATH.
 make pruebas
 ```
 
-El target entra a cada carpeta de `servicios/` y corre `pytest`. Acreditación no tiene carpeta `tests/`. Ese directorio imprime `sin pruebas`.
+El target entra a cada carpeta de `servicios/` y corre `pytest`. Acreditación tiene `tests/test_verificar_asignacion.py`. Motor tiene `tests/test_saga_asignacion.py` (paso de red homologada).
 
 A mano.
 

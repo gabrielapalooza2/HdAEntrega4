@@ -60,7 +60,9 @@ def _iniciar_workers(app):
     la prueba de concepto van en hilos y así el servicio es un solo contenedor.
     """
     from motor_reglas.modulos.partners.infraestructura.consumidores import suscribirse_a_comandos
+    from motor_reglas.modulos.partners.infraestructura.consumidores_saga import suscribirse_a_trabajos
     from motor_reglas.modulos.partners.infraestructura.outbox import iniciar_relay
 
     threading.Thread(target=iniciar_relay, args=(app,), daemon=True, name="outbox-relay").start()
     threading.Thread(target=suscribirse_a_comandos, args=(app,), daemon=True, name="consumidor-comandos").start()
+    threading.Thread(target=suscribirse_a_trabajos, args=(app,), daemon=True, name="consumidor-saga").start()

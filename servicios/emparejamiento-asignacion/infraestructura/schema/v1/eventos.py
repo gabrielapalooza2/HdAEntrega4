@@ -123,3 +123,20 @@ class EventoAsignacionRechazadaPorHabilitacion(Record):
     type = String(default="AsignacionRechazadaPorHabilitacion")
     datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
     data = AsignacionRechazadaPorHabilitacionPayload()
+
+
+class AsignacionConfirmadaPorHabilitacionPayload(Record):
+    trabajo_id = String()
+    asignacion_id = String()
+    proveedor_id = String()
+    estado_real = String()
+    verificado_en = Long()
+
+
+class EventoAsignacionConfirmadaPorHabilitacion(Record):
+    """evt.asignaciones. Consume Emparejamiento (marca CONFIRMADO)."""
+    id = String(); time = Long(); ingestion = Long()
+    specversion = String(default="v1")
+    type = String(default="AsignacionConfirmadaPorHabilitacion")
+    datacontenttype = String(default="AVRO"); service_name = String(); correlation_id = String()
+    data = AsignacionConfirmadaPorHabilitacionPayload()

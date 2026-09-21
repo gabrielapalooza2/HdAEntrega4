@@ -165,6 +165,7 @@ services:
       - DB_PASSWORD=partners
       - DB_NAME=partners
       - SERVICE_NAME=motor-reglas-partner
+      - CONTRATOS_DIR=/app/contratos
     volumes: ["./contratos:/app/contratos:ro"]
     ports: ["5002:5000"]
 
@@ -205,3 +206,23 @@ services:
       - SERVICE_NAME=acreditacion-habilitacion
     volumes: ["./contratos:/app/contratos:ro"]
     ports: ["5004:5000"]
+
+# ─────────────────────────── BFF ───────────────────────────
+
+  bff:
+    build: ./servicios/bff
+    image: hda/bff
+    container_name: bff
+    networks: [hda]
+    depends_on:
+      broker: {condition: service_healthy}
+    environment:
+      - PULSAR_URL=pulsar://broker:6650
+      - PULSAR_TENANT=hda
+      - PULSAR_NAMESPACE=poc
+      - CONTRATOS_DIR=/app/contratos
+      - SERVICE_NAME=bff
+      - PORT=8080
+      - ESPERA_BROKER_SEGUNDOS=90
+    volumes: ["./contratos:/app/contratos:ro"]
+    ports: ["8090:8080"]

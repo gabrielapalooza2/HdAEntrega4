@@ -102,3 +102,18 @@ class Partner(AgregacionRaiz):
         if self.convenio is None or not self.convenio.esta_vigente(momento):
             return False
         return self.regla.permite(categoria)
+
+    def evaluar_asignacion(self, proveedor_id: str) -> tuple[bool, str, int]:
+        """Veredicto autoritativo para la saga coreografiada.
+
+        No muta el agregado. Emparejamiento ya eligio contra su proyeccion;
+        este servicio dice si ese proveedor sigue en la red homologada viva.
+        """
+        version = self.regla.version if self.regla else 0
+        if not self.activo:
+            return False, "PARTNER_INACTIVO", version
+        if self.regla is None:
+            return False, "SIN_REGLA", version
+        if not self.regla.admite_proveedor(proveedor_id):
+            return False, "PROVEEDOR_FUERA_DE_RED", version
+        return True, "ACEPTADA", version

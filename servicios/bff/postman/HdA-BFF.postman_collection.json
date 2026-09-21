@@ -1,0 +1,469 @@
+{
+  "info": {
+    "name": "Hogar de los Alpes — BFF",
+    "description": "Recorrido completo del sistema a traves del BFF.\n\nLas peticiones estan en orden: cada una guarda en variables lo que la siguiente necesita, asi que basta correrlas de arriba abajo.\n\nLas escrituras devuelven **202**, no 200: el BFF publica un comando en Apache Pulsar y responde con un `correlation_id`. El desenlace se consulta en `GET /operaciones/{correlation_id}`.\n\nEl BFF NO tiene endpoint de asignacion: `cmd.emparejamiento` no lo consume nadie. La asignacion la dispara la saga al crear el trabajo.\n\n`GET /sagas/{trabajo_id}` muestra la linea de tiempo de la transaccion larga, derivada de los eventos. El saga log autoritativo vive en orquestacion-trabajos.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "bff",
+      "value": "http://localhost:8090",
+      "description": "Cambiar por la URL de GCP al desplegar"
+    },
+    {
+      "key": "partner_id",
+      "value": ""
+    },
+    {
+      "key": "proveedor_id",
+      "value": ""
+    },
+    {
+      "key": "trabajo_id",
+      "value": ""
+    },
+    {
+      "key": "correlation_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Salud",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('el BFF responde', () => pm.response.to.have.status(200));",
+                  "pm.test('estado ok', () => pm.expect(pm.response.json().estado).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /proyeccion  (cuantos eventos ha aplicado)",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/proyeccion"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Flujo administrativo",
+      "item": [
+        {
+          "name": "POST /partners  — registrar Aseguradora Andina",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/partners",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Aseguradora Andina\",\n  \"tipo_partner\": \"ASEGURADORA\",\n  \"convenio_numero\": \"CONV-2026-031\",\n  \"vigencia_desde\": \"2026-01-01T00:00:00Z\",\n  \"porcentaje_comision\": 12.5,\n  \"regla\": {\n    \"cobertura_contratada\": [\"PLOMERIA\", \"ELECTRICIDAD\"],\n    \"sla_minutos\": 120,\n    \"monto_maximo_sin_aprobacion\": { \"monto\": 500000.00, \"moneda\": \"COP\" },\n    \"pasos_de_aprobacion\": [\"ANALISTA_SINIESTROS\"],\n    \"red_homologada\": [\"prov-001\", \"prov-002\"]\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('devuelve 202, no 200', () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test('trae correlation_id', () => pm.expect(b.correlation_id).to.be.a('string'));",
+                  "pm.collectionVariables.set('partner_id', b.recurso_id);",
+                  "pm.collectionVariables.set('correlation_id', b.correlation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /operaciones/{{correlation_id}}  — como va",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/operaciones/{{correlation_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "console.log('estado de la operacion:', b.estado);",
+                  "pm.test('la operacion existe', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /partners/{{partner_id}}  — la regla ya viajo por el bus",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/partners/{{partner_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('el partner llego a la proyeccion', () => pm.response.to.have.status(200));",
+                  "pm.test('con su SLA', () => pm.expect(pm.response.json().sla_minutos).to.eql(120));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT /partners/{{partner_id}}/regla  — cambiar el SLA a 45",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/partners/{{partner_id}}/regla",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cobertura_contratada\": [\"PLOMERIA\", \"ELECTRICIDAD\", \"PINTURA\"],\n  \"sla_minutos\": 45,\n  \"monto_maximo_sin_aprobacion\": { \"monto\": 800000.00, \"moneda\": \"COP\" },\n  \"pasos_de_aprobacion\": [\"ANALISTA_SINIESTROS\"],\n  \"red_homologada\": [\"prov-001\", \"prov-002\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('aceptada', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('correlation_id', pm.response.json().correlation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /proveedores  — acreditar Plomeria Express",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/proveedores",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Plomeria Express SAS\",\n  \"categorias\": [\"PLOMERIA\"],\n  \"ciudades\": [\"BOGOTA\"],\n  \"vigente_hasta\": \"2027-01-01T00:00:00Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('aceptada', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('proveedor_id', pm.response.json().recurso_id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Flujo operativo — camino feliz",
+      "item": [
+        {
+          "name": "POST /trabajos  — trabajo de PLOMERIA (dentro de cobertura)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/trabajos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"categoria\": \"PLOMERIA\",\n  \"ciudad\": \"BOGOTA\",\n  \"urgencia\": \"NORMAL\",\n  \"descripcion\": \"Fuga en el bano principal\",\n  \"monto_estimado\": { \"monto\": 250000.00, \"moneda\": \"COP\" }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('aceptada', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('correlation_id', pm.response.json().correlation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /operaciones/{{correlation_id}}  — debe quedar COMPLETADA",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/operaciones/{{correlation_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "console.log(b.estado, b.resultado);",
+                  "if (b.resultado && b.resultado.trabajo_id) {",
+                  "  pm.collectionVariables.set('trabajo_id', b.resultado.trabajo_id);",
+                  "}",
+                  "pm.test('la saga llego a un desenlace', () => pm.expect(['COMPLETADA','RECHAZADA']).to.include(b.estado));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /trabajos/{{trabajo_id}}  — VISTA COMPUESTA",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/trabajos/{{trabajo_id}}",
+            "description": "Una sola llamada devuelve el trabajo, la regla del partner que se le aplico y la asignacion con su proveedor. Sin BFF serian tres llamadas a tres servicios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde', () => pm.response.to.have.status(200));",
+                  "const v = pm.response.json();",
+                  "pm.test('trae el trabajo', () => pm.expect(v.trabajo).to.be.an('object'));",
+                  "pm.test('y el partner, que vive en OTRO servicio', () => pm.expect(v.partner).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /sagas/{{trabajo_id}}  — linea de tiempo de la saga",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/sagas/{{trabajo_id}}",
+            "description": "Los cuatro participantes, en orden, derivados de los eventos. Sin una sola llamada sincrona entre servicios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json();",
+                  "console.log('saga:', s.estado, '-', s.total_pasos, 'pasos');",
+                  "s.pasos.forEach(p => console.log('  ', p.secuencia, p.servicio, p.tipo, p.resultado));",
+                  "pm.test('la saga tiene pasos', () => pm.expect(s.pasos.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Camino de rechazo",
+      "item": [
+        {
+          "name": "POST /trabajos  — CARPINTERIA (fuera de cobertura)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/trabajos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"categoria\": \"CARPINTERIA\",\n  \"ciudad\": \"BOGOTA\",\n  \"descripcion\": \"Cambio de puerta\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('correlation_id', pm.response.json().correlation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /operaciones/{{correlation_id}}  — debe quedar RECHAZADA",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/operaciones/{{correlation_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "console.log(b.estado, b.motivo);",
+                  "pm.test('rechazado por cobertura', () => pm.expect(b.motivo || '').to.include('COBERTURA'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Compensacion de la saga",
+      "item": [
+        {
+          "name": "POST /proveedores/{{proveedor_id}}/suspension",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/proveedores/{{proveedor_id}}/suspension",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Poliza de responsabilidad civil vencida\"\n}"
+            },
+            "description": "Cambia el dato autoritativo en Acreditacion, que publica EstadoDeHabilitacionCambiado."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('aceptada', () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /trabajos  — nuevo trabajo para el mismo partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{bff}}/trabajos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"partner_id\": \"{{partner_id}}\",\n  \"categoria\": \"PLOMERIA\",\n  \"ciudad\": \"BOGOTA\",\n  \"descripcion\": \"Segunda fuga, con el proveedor ya suspendido\"\n}"
+            },
+            "description": "Si Emparejamiento todavia no aplico la suspension, asigna al proveedor suspendido y Acreditacion rechaza: ahi se ve la compensacion. Si ya la aplico, no asigna a nadie."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('correlation_id', pm.response.json().correlation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /operaciones/{{correlation_id}}  — tomar el trabajo_id",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/operaciones/{{correlation_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "if (b.resultado && b.resultado.trabajo_id) pm.collectionVariables.set('trabajo_id', b.resultado.trabajo_id);",
+                  "console.log(b.estado, b.motivo || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /sagas/{{trabajo_id}}  — la compensacion, paso a paso",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/sagas/{{trabajo_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json();",
+                  "s.pasos.forEach(p => console.log('  ', p.secuencia, p.servicio, p.tipo, p.resultado, p.motivo || ''));",
+                  "pm.test('hay un paso de compensacion o el trabajo quedo sin asignar', () =>",
+                  "  pm.expect(['COMPENSADA','EN_CURSO','COMPLETADA']).to.include(s.estado));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /sagas  — todas las sagas y su estado",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/sagas"
+          }
+        },
+        {
+          "name": "GET /operaciones  — las ultimas operaciones",
+          "request": {
+            "method": "GET",
+            "url": "{{bff}}/operaciones?limite=20"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -102,8 +102,14 @@ class Trabajo:
                 self.proveedor_id = evento.proveedor_id
 
             case ev.ProveedorDescartado():
+                # Compensacion: la asignacion optimista queda deshecha.
+                # El trabajo vuelve a CREADO para que el reloj del SLA siga
+                # corriendo: ASIGNADO solo es terminal cuando la habilitacion
+                # autoritativa confirma, o mientras nadie haya revertido.
                 self.intentos = evento.intento
                 self.proveedor_id = None
+                if self.estado is EstadoTrabajo.ASIGNADO:
+                    self.estado = EstadoTrabajo.CREADO
                 if evento.proveedor_id not in self.proveedores_excluidos:
                     self.proveedores_excluidos += (evento.proveedor_id,)
 

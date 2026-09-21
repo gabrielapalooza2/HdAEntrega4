@@ -288,7 +288,7 @@ def test_asignar_pone_el_trabajo_en_asignado(limpia):
 
 
 def test_el_tope_de_tres_intentos_escala(limpia):
-    """EL UNICO PUNTO ORQUESTADO, de punta a punta."""
+    """Tres rechazos compensan y el tercero escala. Sin comando a Emparejamiento."""
     tid = _crear_y_devolver_id(limpia)
 
     for proveedor in ("PROV_1", "PROV_2", "PROV_3"):
@@ -301,28 +301,129 @@ def test_el_tope_de_tres_intentos_escala(limpia):
     assert intentos == 3
     assert set(excluidos) == {"PROV_1", "PROV_2", "PROV_3"}
 
-    # Se pidieron DOS reasignaciones, no tres: la tercera escala en vez de
-    # reintentar.
     comandos = [c.decodificar(bytes(f[0])) for f in
                 filas(limpia, "SELECT payload FROM outbox WHERE topico = %s",
                       (c.TOPICO_CMD_EMPAREJAMIENTO,))]
-    assert len(comandos) == 2
-    assert comandos[0].data["intento"] == 2
-    assert comandos[1].data["intento"] == 3
-    assert set(comandos[1].data["excluir_proveedores"]) == {"PROV_1", "PROV_2"}
+    assert comandos == []
 
 
-def test_los_excluidos_viajan_en_el_comando(limpia):
-    """Emparejamiento no puede leer nuestra base: el estado necesario para
-    decidir va EN EL MENSAJE."""
+def sobre_regla_ok(tid, proveedor, asignacion_id="a-ok", partner_id="SEGUROS_ANDES"):
+    return c.empaquetar(
+        c.AsignacionAceptadaPorReglaPartner(
+            trabajo_id=tid, proveedor_id=proveedor,
+            asignacion_id=asignacion_id, partner_id=partner_id, regla_version=1,
+            verificado_en=datetime.now(timezone.utc)),
+        service_name="motor-reglas-partner")
+
+
+def sobre_regla_ko(tid, proveedor, asignacion_id="a-mal"):
+    return c.empaquetar(
+        c.AsignacionRechazadaPorReglaPartner(
+            trabajo_id=tid, proveedor_id=proveedor, asignacion_id=asignacion_id,
+            partner_id="SEGUROS_ANDES", regla_version=1,
+            motivo="PROVEEDOR_FUERA_DE_RED",
+            verificado_en=datetime.now(timezone.utc)),
+        service_name="motor-reglas-partner")
+
+
+def sobre_confirmacion(tid, proveedor, asignacion_id="a-ok"):
+    return c.empaquetar(
+        c.AsignacionConfirmadaPorHabilitacion(
+            trabajo_id=tid, proveedor_id=proveedor, estado_real="HABILITADO",
+            asignacion_id=asignacion_id,
+            verificado_en=datetime.now(timezone.utc)),
+        service_name="acreditacion-habilitacion")
+
+
+def test_camino_feliz_cierra_la_saga_como_completada(limpia):
+    """Transaccion larga exitosa: crear -> asignar -> Motor -> confirmar."""
+    tid = _crear_y_devolver_id(limpia)
+    aplicacion.manejar_trabajo_asignado(c.empaquetar(
+        c.TrabajoAsignado(trabajo_id=tid, proveedor_id="PROV_OK",
+                          asignacion_id="asig-ok"),
+        service_name="emparejamiento-asignacion"))
+    aplicacion.manejar_regla_aceptada(sobre_regla_ok(tid, "PROV_OK", "asig-ok"))
+    aplicacion.manejar_asignacion_confirmada(sobre_confirmacion(tid, "PROV_OK", "asig-ok"))
+
+    saga = filas(limpia, "SELECT estado, proveedor_id, paso_actual, coordinador FROM "
+                         "saga_asignacion WHERE saga_id = %s", (tid,))
+    assert saga == [("COMPLETADA", "PROV_OK", "AsignacionConfirmadaPorHabilitacion",
+                     "orquestacion-trabajos")]
+
+    pasos = filas(limpia, "SELECT secuencia, servicio, tipo_mensaje, rol, resultado "
+                          "FROM saga_paso WHERE saga_id = %s ORDER BY secuencia", (tid,))
+    assert [p[2] for p in pasos] == [
+        "TrabajoCreado", "TrabajoAsignado",
+        "AsignacionAceptadaPorReglaPartner",
+        "AsignacionConfirmadaPorHabilitacion",
+    ]
+    assert {p[1] for p in pasos} == {
+        "orquestacion-trabajos", "emparejamiento-asignacion",
+        "motor-reglas-partner", "acreditacion-habilitacion",
+    }
+    assert pasos[-1][3:] == ("CIERRE", "CONFIRMADO")
+    assert filas(limpia, "SELECT estado FROM proyeccion_trabajo WHERE trabajo_id = %s",
+                 (tid,))[0][0] == "ASIGNADO"
+
+
+def test_rechazo_de_habilitacion_compensa_y_queda_en_el_saga_log(limpia):
+    """Fallo que dispara compensacion: la asignacion optimista se deshace."""
+    tid = _crear_y_devolver_id(limpia)
+    aplicacion.manejar_trabajo_asignado(c.empaquetar(
+        c.TrabajoAsignado(trabajo_id=tid, proveedor_id="PROV_MAL",
+                          asignacion_id="asig-mal"),
+        service_name="emparejamiento-asignacion"))
+    aplicacion.manejar_regla_aceptada(sobre_regla_ok(tid, "PROV_MAL", "asig-mal"))
+    aplicacion.manejar_asignacion_rechazada(sobre_rechazo(tid, "PROV_MAL"))
+
+    vista = filas(limpia, "SELECT estado, proveedor_id FROM proyeccion_trabajo "
+                          "WHERE trabajo_id = %s", (tid,))
+    assert vista == [("CREADO", None)]
+
+    saga = filas(limpia, "SELECT estado, motivo, coordinador FROM saga_asignacion WHERE saga_id = %s",
+                 (tid,))
+    assert saga[0][0] == "COMPENSADA"
+    assert "LICENCIA_VENCIDA" in saga[0][1]
+    assert saga[0][2] == "orquestacion-trabajos"
+
+    servicios = [f[0] for f in filas(
+        limpia, "SELECT servicio FROM saga_paso WHERE saga_id = %s ORDER BY secuencia", (tid,))]
+    assert "motor-reglas-partner" in servicios
+    roles = [f[0] for f in filas(
+        limpia, "SELECT rol FROM saga_paso WHERE saga_id = %s ORDER BY secuencia", (tid,))]
+    assert roles.count("COMPENSACION") == 2
+    assert "PASO" in roles
+
+
+def test_rechazo_de_motor_compensa_sin_mandar_asignar_proveedor(limpia):
+    tid = _crear_y_devolver_id(limpia)
+    aplicacion.manejar_trabajo_asignado(c.empaquetar(
+        c.TrabajoAsignado(trabajo_id=tid, proveedor_id="PROV_AJENO",
+                          asignacion_id="asig-red"),
+        service_name="emparejamiento-asignacion"))
+    aplicacion.manejar_regla_rechazada(sobre_regla_ko(tid, "PROV_AJENO", "asig-red"))
+
+    saga = filas(limpia, "SELECT estado, motivo FROM saga_asignacion WHERE saga_id = %s",
+                 (tid,))
+    assert saga[0][0] == "COMPENSADA"
+    assert "PROVEEDOR_FUERA_DE_RED" in saga[0][1]
+    tipos = [f[0] for f in filas(
+        limpia, "SELECT tipo_mensaje FROM saga_paso WHERE saga_id = %s ORDER BY secuencia",
+        (tid,))]
+    assert "AsignacionRechazadaPorReglaPartner" in tipos
+    assert filas(limpia, "SELECT count(*) FROM outbox WHERE topico = %s",
+                 (c.TOPICO_CMD_EMPAREJAMIENTO,))[0][0] == 0
+
+
+def test_la_coreografia_no_publica_asignar_proveedor(limpia):
+    """AsignarProveedor queda huerfano a proposito: no se emite."""
     tid = _crear_y_devolver_id(limpia)
     aplicacion.manejar_asignacion_rechazada(sobre_rechazo(tid, "PROV_1"))
-
-    comando = c.decodificar(bytes(filas(
-        limpia, "SELECT payload FROM outbox WHERE topico = %s",
-        (c.TOPICO_CMD_EMPAREJAMIENTO,))[0][0]))
-    assert comando.type == "AsignarProveedor"
-    assert comando.data["excluir_proveedores"] == ["PROV_1"]
+    assert filas(limpia, "SELECT count(*) FROM outbox WHERE topico = %s",
+                 (c.TOPICO_CMD_EMPAREJAMIENTO,))[0][0] == 0
+    tipos = [f[0] for f in filas(limpia, "SELECT tipo FROM eventos_trabajo WHERE trabajo_id = %s",
+                                 (tid,))]
+    assert "ProveedorDescartado" in tipos
 
 
 # ═══════════════════════════════════════════════════════ barrido de SLA ════
