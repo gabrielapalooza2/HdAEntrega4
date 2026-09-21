@@ -1,0 +1,19 @@
+# Arregla la conectividad del broker para clientes DENTRO de la red de Docker.
+#
+# El compose base anuncia `advertisedListeners=external:pulsar://127.0.0.1:6650`.
+# Eso sirve para un cliente en el host (el puerto 6650 esta mapeado), pero un
+# servicio DENTRO de la red recibe "conectate a 127.0.0.1", que en su propio
+# contenedor no es el broker: la conexion muere con "Connection refused".
+#
+# Con dos listeners cada cliente recibe la direccion que le sirve:
+#   internal -> broker:6650      para los microservicios en la red de Docker
+#   external -> 127.0.0.1:6650   para los scripts que corren en el host
+#
+# `internalListenerName` fija cual se entrega cuando el cliente no pide ninguno,
+# que es el caso de los servicios. Los scripts del host piden `external`
+# explicitamente via PULSAR_LISTENER.
+services:
+  broker:
+    environment:
+      - advertisedListeners=internal:pulsar://broker:6650,external:pulsar://127.0.0.1:6650
+      - internalListenerName=internal

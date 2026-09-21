@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import pulsar
 
-from orquestacion.config import broker_url
+from orquestacion.config import broker_url, opciones_cliente
 from orquestacion.mensajeria import contratos as c
 
 # El service_name simulado NO puede ser el nuestro: el consumidor de
@@ -134,7 +134,8 @@ def main() -> int:
     # Warn y no Info: por defecto el cliente nativo escupe ~30 lineas por
     # conexion y sepulta la salida util.
     cliente = pulsar.Client(broker_url(),
-                            logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn))
+                            logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn),
+                            **opciones_cliente())
     try:
         productor = cliente.create_producer(mensaje.TOPICO, schema=pulsar.schema.BytesSchema())
         for i in range(args.duplicar):

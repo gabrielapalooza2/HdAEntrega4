@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import _pulsar
 import pulsar
 
-from orquestacion.config import broker_url
+from orquestacion.config import broker_url, opciones_cliente
 from orquestacion.mensajeria import contratos as c
 
 
@@ -42,7 +42,8 @@ def main() -> int:
     topico = args.topico if "://" in args.topico else f"{c.NAMESPACE}/{args.topico}"
 
     cliente = pulsar.Client(broker_url(),
-                            logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn))
+                            logger=pulsar.ConsoleLogger(pulsar.LoggerLevel.Warn),
+                            **opciones_cliente())
     try:
         consumidor = cliente.subscribe(
             topico,
