@@ -4,6 +4,26 @@ Cuatro microservicios coordinan el ciclo de respuesta de un siniestro. Cada serv
 
 Este archivo es la entrada al monorepo. Dice cómo levantar el sistema, qué hay en cada carpeta, y cómo probar los escenarios de calidad que el código ya demuestra.
 
+## Despliegue en la nube
+
+El sistema completo está desplegado en **Microsoft Azure** y responde públicamente:
+
+| Servicio | URL |
+|---|---|
+| Orquestación de trabajos | http://172.184.141.21:5001/health |
+| Motor reglas partner | http://172.184.141.21:5002/health |
+| Emparejamiento y asignación | http://172.184.141.21:8000/health |
+| Acreditación y habilitación | http://172.184.141.21:5004/health |
+| Admin del cluster Pulsar | http://172.184.141.21:8080/admin/v2/brokers/health |
+
+Consulta del estado de un trabajo: `http://172.184.141.21:5001/trabajos/<trabajo_id>/estado`
+
+**Infraestructura:** una VM `Standard_B4ps_v2` (4 vCPU, 16 GB, ARM64) en la región `westus`, con Ubuntu 24.04. Corre el mismo `docker-compose.yml` de este repo: cluster Pulsar de tres nodos (ZooKeeper, BookKeeper, broker), cuatro PostgreSQL y los cuatro microservicios.
+
+Es HTTP, no HTTPS, y cada servicio expone su propio puerto: no hay un proxy delante que los unifique. Las APIs HTTP son para operar y demostrar; entre servicios solo hay mensajes por Pulsar.
+
+La IP es estática. La VM puede estar **apagada** fuera de las sesiones de demostración para no consumir créditos; si un enlace no responde, es eso. Cómo se desplegó, y cómo repetirlo, está en [DESPLIEGUE.md](DESPLIEGUE.md).
+
 ## Qué necesitas
 
 - Docker Desktop con Compose v2

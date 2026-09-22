@@ -97,8 +97,16 @@ gcloud compute ssh hda-entrega4 --zone=us-central1-a
 
 git clone https://github.com/gabrielapalooza2/HdAEntrega4.git
 cd HdAEntrega4
+sudo mkdir -p data/zookeeper data/bookkeeper
+sudo chown -R 10000:10000 data/zookeeper data/bookkeeper
 make todo
 ```
+
+**El `chown` no es opcional en Linux.** Las imagenes de Pulsar corren como un
+usuario sin privilegios (uid `10000`), pero Docker crea las carpetas montadas
+como `root`. Sin esto ZooKeeper muere con `Unable to create data directory
+data/zookeeper/version-2` y todo lo demas queda esperandolo. En macOS no pasa
+porque Docker Desktop traduce los permisos de los volumenes.
 
 `make todo` encadena `infra` -> `topicos` -> `servicios`. La construccion de las
 cuatro imagenes tarda varios minutos la primera vez.
@@ -160,8 +168,65 @@ de calidad no lo necesitan: pegan por HTTP a 5001 y 5002.
 
 | Sintoma | Causa | Arreglo |
 |---|---|---|
+| `zookeeper is unhealthy`, log dice `Unable to create data directory` | permisos de `data/` en Linux | `sudo chown -R 10000:10000 data/zookeeper data/bookkeeper` |
 | `make topicos` da `Permission denied` | clon anterior al fix del bit ejecutable | `chmod +x scripts/*.sh servicios/*/scripts/*.sh` |
 | `pulsar-init` sale con `exit 137` | Compose relanzo las dependencias | `docker compose up -d --no-deps <servicio>` |
 | `Error while recovering ledger` en el broker | estado inconsistente en `data/` | `docker compose down -v && rm -rf data/`, despues `make infra` y `make topicos` |
 | Un servicio no conecta al broker | `advertisedListeners` mal | dentro de la red de Docker debe resolver a `broker:6650` |
 | `curl` a la IP no responde | falta la regla de firewall o la VM esta apagada | revisar `gcloud compute firewall-rules list` |
+
+---
+
+## Azure: el despliegue que esta en uso
+
+El despliegue publico (ver el README) se hizo en **Azure for Students**, no en
+GCP: la prueba gratuita de GCP pide prepago en Colombia. Los pasos 4 a 6 de
+arriba son identicos; cambia solo como se crea la VM. Todo desde **Azure Cloud
+Shell** (icono `>_` del portal), que ya viene autenticado.
+
+```bash
+az account set --subscription "Azure for Students"
+
+# Una suscripcion nueva NO trae registrado el proveedor de maquinas virtuales.
+# Sin esto, `az vm list-usage` devuelve vacio y parece que no hay cuota.
+az provider register -n Microsoft.Compute
+
+az group create -n hda-rg -l eastus
+az vm create -g hda-rg -n hda-entrega4 --location westus \
+  --image Canonical:ubuntu-24_04-lts:server-arm64:latest \
+  --size Standard_B4ps_v2 --os-disk-size-gb 60 \
+  --admin-username azureuser --generate-ssh-keys --public-ip-sku Standard
+az vm open-port -g hda-rg -n hda-entrega4 --port 5001,5002,5004,8000,8080 --priority 900
+```
+
+Por que esa region y ese tamano, que es lo que costo encontrar:
+
+| Restriccion | Efecto |
+|---|---|
+| Politica de regiones de la suscripcion | `eastus` y `eastus2` rechazadas con `RequestDisallowedByAzure`; `westus` permitida |
+| Cuota por familia | 0 en las series D v6/v7; 4-10 en las B |
+| Capacidad fisica en `westus` | sin maquinas x86 libres de las familias con cuota (`SkuNotAvailable`) |
+
+La unica combinacion con region permitida, cuota **y** capacidad fue
+`Standard_B4ps_v2`, que es **ARM64**. Se verifico antes que todo el stack tiene
+version ARM: las imagenes `apachepulsar/pulsar:3.2.0`, `postgres:16-alpine` y
+`python:3.1x-slim`, y ruedas `aarch64` de `pulsar-client`, `fastavro`, `psycopg`
+y `psycopg2-binary`.
+
+Para diagnosticar cuota y capacidad en otra suscripcion:
+
+```bash
+az vm list-usage -l westus -o table
+az vm list-skus -l westus --resource-type virtualMachines --all \
+  --query "[?length(restrictions)==\`0\`].name" -o tsv
+```
+
+Apagar sin perder la IP ni los datos (con `stop` Azure sigue cobrando el computo):
+
+```bash
+az vm deallocate -g hda-rg -n hda-entrega4
+az vm start      -g hda-rg -n hda-entrega4
+```
+
+Al volver a prenderla los contenedores no arrancan solos: entrar por SSH y
+`cd ~/HdAEntrega4 && docker compose up -d --no-deps`.
