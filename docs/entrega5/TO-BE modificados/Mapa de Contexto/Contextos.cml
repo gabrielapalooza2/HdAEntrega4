@@ -1,0 +1,383 @@
+Domain HogarDeLosAlpes {
+  domainVisionStatement = "Conectar hogares, aseguradoras, bancos y comercios que buscan soluciones a problemas del hogar relacionados con plomeria, baldosería, electricidad, carpinteria y pintura, con proveedores de servicios verificados (sean independientes o alguna empresa de servicios), buscando una orquestacion completa desde una consulta hasta el pago y calificacion del servicio prestado y soportado por una plataforma que es capaz de escalar apropiadamente para la expansion propuesta del negocio a nuevos paises."
+
+  /* CORE_DOMAIN */
+
+  Subdomain GestionServicio {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Orquestar el ciclo de vida del trabajo, gestionando el orden, bloqueos y manejo de trabajos paralelos."
+  }
+
+  Subdomain Marketplace {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Publicar trabajos y hacer emparejamiento de demanda con proveedores disponibles."
+  }
+
+  Subdomain AlianzasB2B2C {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar los trabajos de siniestros e instalacion con partners a traves de integraciones con el sistema."
+  }
+
+  Subdomain Verificaciones {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Manejar la verificacion de antecedentes y documentacion de proveedores por servicio y zona."
+  }
+
+  Subdomain Cotizaciones {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar la creacion, seleccion y distribucion de cotizaciones a proveedores."
+  }
+
+  Subdomain AsistenteIA {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Diagnostico a traves de agente IA para categoria, urgencia, ubicacion y evidencia."
+  }
+
+  /* SUPPORTING_DOMAIN */
+
+  Subdomain Proveedores {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Gestionar la informacion de proveedores: perfil, servicios que prestan, cobertura geografica y reputacion."
+  }
+
+  Subdomain MonitoreoOperativo {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Trabajo de los agentes para gestionar actividades de monitoreo de avance, novedades y disputas."
+  }
+
+  Subdomain ControlCalidad {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Gestionar actividades y reglamentos para resolver disputas sobre la calidad del servicio prestado (puede variar depende del territorio)."
+  }
+
+  Subdomain EvidenciasYExpediente {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Recoleccion, consolidacion y sincronizacion de evidencias (fotos, documentos, bitacora) exigidas por partners y por auditoria interna."
+  }
+
+  /* GENERIC_SUBDOMAIN */
+
+  Subdomain Pagos {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Procesamiento de pagos y facturacion por servicio con pasarelas externas."
+  }
+
+  Subdomain Autenticacion {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Autenticacion y autorizacion de usuarios en la plataforma."
+  }
+
+  Subdomain NotificacionesYComunicaciones {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Mensajeria a clientes, proveedores y partners."
+  }
+}
+
+/* Fintech deja de ser un Subdomain de HogarDeLosAlpes y pasa a ser su
+ * propio Domain raiz. Feedback recibido: Fintech es una linea de negocio
+ * propia (inclusion financiera de proveedores mediante billetera y
+ * micro-prestamos), con una propuesta de valor distinta a "conectar
+ * hogares con proveedores verificados". La relacion Separate Ways que ya
+ * declara este mismo archivo entre FintechBC y AlianzasBC/FacturaAPartner
+ * ya reconocia esto a nivel tactico; este cambio lo hace explicito a
+ * nivel estrategico tambien: mercados distintos, sin dominio compartido.
+ */
+Domain ServiciosFinancierosProveedores {
+
+  domainVisionStatement = "Dar acceso a servicios financieros (billetera digital y micro-prestamos) a los proveedores de servicios del hogar, muchos de ellos profesionales independientes sin bancarizacion ni historial crediticio formal, usando su historial de trabajos completados y calificaciones como fuente alterna de scoring."
+
+  Subdomain Fintech {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar wallets y micro-prestamos a proveedores usando su historial crediticio derivado de trabajos completados."
+  }
+}
+
+/* Contextos de software TO-BE */
+
+BoundedContext ProveedoresBC implements Proveedores {
+  type = FEATURE
+  domainVisionStatement = "Duenio del perfil maestro del proveedor (persona natural o empresa), servicios declarados y cobertura geografica. No posee el expediente de verificacion ni escribe reputacion: consume Habilitacion/Homologacion (Verificaciones) y ReputacionActualizada (ControlCalidad) como PL."
+  implementationTechnology = "Servicio propio, eventos"
+}
+
+BoundedContext VerificacionesBC implements Verificaciones {
+  type = FEATURE
+  domainVisionStatement = "Duenio del expediente de verificacion: antecedentes, titulos, mercantil, aprobacion por servicio y zona, re-validaciones y homologacion por partner. Publica eventos de habilitacion. ACL frente a sistemas externos. No almacena el perfil comercial (ProveedoresBC) ni la reputacion (ControlCalidadBC)."
+  implementationTechnology = "Servicio propio, eventos, ACL hacia verificacion externa"
+}
+
+BoundedContext MarketplaceBC implements Marketplace, EvidenciasYExpediente {
+  type = FEATURE
+  domainVisionStatement = "Duenio del canal B2C: solicitud del hogar, publicacion y matching contra proveedores habilitados y reputacion publicada (PL). No conoce reglas de partner. Crea Trabajo en GestionServicio via PL. Consume diagnostico propuesto por AsistenteIA y acepta o rechaza. Realiza EvidenciasYExpediente en B2C: evidencia de solicitud y expediente de auditoria interna, distinto del expediente oponible de AlianzasBC."
+  implementationTechnology = "Servicio propio, eventos"
+}
+
+BoundedContext AlianzasBC implements AlianzasB2B2C, EvidenciasYExpediente {
+  type = FEATURE
+  domainVisionStatement = "Duenio de Partner, reglas (red, SLA, montos, aprobaciones), caso de siniestro/instalacion, expediente oponible y factura de HdA al partner. Entrada ACL por partner y salida OHS+PL. No posee el agregado Trabajo: pide crearlo a GestionServicio. No posee el expediente de auditoria B2C."
+  implementationTechnology = "Servicio propio, ACL por partner, OHS/PL asincrono"
+}
+
+BoundedContext GestionServicioBC implements GestionServicio, MonitoreoOperativo {
+  type = FEATURE
+  domainVisionStatement = "Duenio del ciclo de vida del Trabajo: sub-trabajos, orden, bloqueos, paralelos, novedades. Invariante: no ejecutar sub-trabajo con predecesor bloqueante incompleto. Agentes de MonitoreoOperativo trabajan excepciones aqui y escalan disputa de calidad a ControlCalidad (no la poseen)."
+  implementationTechnology = "Servicio propio, modelo rico, eventos, consola de excepciones"
+}
+
+BoundedContext CotizacionesBC implements Cotizaciones {
+  type = FEATURE
+  domainVisionStatement = "Duenio de la cotizacion: creacion, visita/info adicional, numeros internos, seleccion, vigencia, anulacion/recotizacion. Consume TrabajoId (PL)."
+  implementationTechnology = "Servicio propio, eventos"
+}
+
+BoundedContext AsistenteIABC implements AsistenteIA {
+  type = FEATURE
+  domainVisionStatement = "Diagnostico IA (categoria, urgencia, ubicacion, evidencia) y asistencia a verificacion/priorizacion. Propone. No posee invariantes de Trabajo ni de Verificaciones."
+  implementationTechnology = "Consumidores de eventos / modelos de IA"
+}
+
+BoundedContext PagosBC implements Pagos {
+  type = FEATURE
+  domainVisionStatement = "Cobro marketplace via pasarela, retencion hasta cierre del Trabajo y liquidacion al proveedor. ACL a la pasarela. La factura al partner vive en AlianzasBC. wallet/microcredito en FintechBC."
+  implementationTechnology = "Servicio propio, ACL hacia pasarela"
+}
+
+BoundedContext ControlCalidadBC implements ControlCalidad {
+  type = FEATURE
+  domainVisionStatement = "Duenio de calificacion, disputa de calidad, garantia y reputacion (reglamentos pueden variar por territorio). Publica ReputacionActualizada (PL). Monitoreo escala. este contexto resuelve el ciclo de la disputa."
+  implementationTechnology = "Servicio propio, eventos"
+}
+
+BoundedContext FintechBC implements Fintech {
+  type = FEATURE
+  domainVisionStatement = "Billetera y micro-prestamos. Scoring desde eventos de trabajos cerrados y calificaciones (PL). Separate Ways respecto de FacturaAPartner."
+  implementationTechnology = "Servicio propio, eventos de scoring"
+}
+
+BoundedContext AutenticacionBC implements Autenticacion {
+  type = APPLICATION
+  domainVisionStatement = "Identidades y sesiones de usuarios HdA. Open Host. El dueno del predio en un siniestro no es necesariamente usuario registrado."
+  implementationTechnology = "IdP / servicio de identidad"
+}
+
+BoundedContext NotificacionesBC implements NotificacionesYComunicaciones {
+  type = APPLICATION
+  domainVisionStatement = "Entrega de mensajes. Conformista de eventos de negocio. Sin reglas de HdA."
+  implementationTechnology = "Servicio generico de mensajeria"
+}
+
+/* Sistemas externos */
+
+BoundedContext CanalesDigitales {
+  type = SYSTEM
+  domainVisionStatement = "Web y app. TO-BE: UI delgada downstream de Marketplace (BFF con ACL) y de Autenticacion (OIDC Conformist)."
+}
+
+BoundedContext SistemasDeVerificacionExterna {
+  type = SYSTEM
+  domainVisionStatement = "Policia, registros, certificadoras. TO-BE detras de ACL en VerificacionesBC."
+}
+
+BoundedContext EcosistemaPartnersB2B2C {
+  type = SYSTEM
+  domainVisionStatement = "Sistemas de partners (incl. Seguros de los Alpes por pais). TO-BE: PL de HdA o adaptador por partner."
+}
+
+BoundedContext PasarelaDePagos {
+  type = SYSTEM
+  domainVisionStatement = "Pasarela B2C. TO-BE detras de ACL en PagosBC."
+}
+
+/* Context Map TO-BE */
+
+ContextMap HdA_TOBE_Landscape {
+  type = SYSTEM_LANDSCAPE
+  state = TO_BE
+
+  contains ProveedoresBC, VerificacionesBC, MarketplaceBC, AlianzasBC
+  contains GestionServicioBC, CotizacionesBC, AsistenteIABC
+  contains PagosBC, ControlCalidadBC, FintechBC
+  contains AutenticacionBC, NotificacionesBC
+  contains CanalesDigitales, SistemasDeVerificacionExterna
+  contains EcosistemaPartnersB2B2C, PasarelaDePagos
+
+  /* Autenticacion */
+
+  AutenticacionBC [U,OHS,PL]->[D,ACL] MarketplaceBC : IdentidadHaciaMarketplace {
+    implementationTechnology = "OIDC / eventos"
+  }
+
+  AutenticacionBC [U,OHS,PL]->[D,ACL] ProveedoresBC : IdentidadHaciaProveedores {
+    implementationTechnology = "OIDC / eventos"
+  }
+
+  AutenticacionBC [U,OHS,PL]->[D,ACL] VerificacionesBC : IdentidadHaciaVerificaciones {
+    implementationTechnology = "OIDC / eventos"
+  }
+
+  /* Proveedores (perfil) vs Verificaciones (habilitacion) C/S  */
+
+  VerificacionesBC [D,C]<-[U,S] ProveedoresBC : PerfilParaVerificar {
+    implementationTechnology = "Eventos ProveedorRegistrado, CoberturaDeclarada (contrato negociado C/S)"
+    downstreamRights = INFLUENCER
+  }
+
+  ProveedoresBC [D,ACL]<-[U,OHS,PL] VerificacionesBC : HabilitacionSobrePerfil {
+    implementationTechnology = "Eventos ProveedorHabilitado, HomologacionOtorgada, HomologacionRevocada"
+  }
+
+  /* Habilitacion hacia canales: C/S (planning de re-validaciones)*/
+
+  MarketplaceBC [D,C]<-[U,S] VerificacionesBC : ProveedoresHabilitadosMarketplace {
+    implementationTechnology = "Eventos ProveedorHabilitadoParaMarketplace (contrato negociado C/S)"
+    downstreamRights = INFLUENCER
+  }
+
+  AlianzasBC [D,C]<-[U,S] VerificacionesBC : ProveedoresHomologadosPartner {
+    implementationTechnology = "Eventos HomologacionOtorgada, HomologacionRevocada (contrato negociado C/S)"
+    downstreamRights = INFLUENCER
+  }
+
+  GestionServicioBC [D,ACL]<-[U,OHS,PL] VerificacionesBC : HabilitacionParaAsignacion {
+    implementationTechnology = "Consulta / eventos de habilitacion vigente"
+  }
+
+  /* Creacion de Trabajo */
+
+  MarketplaceBC [U,OHS,PL]->[D,ACL] GestionServicioBC : SolicitudATrabajo {
+    implementationTechnology = "Comando CrearTrabajoDesdeMarketplace + evento TrabajoCreado"
+  }
+
+  AlianzasBC [U,OHS,PL]->[D,ACL] GestionServicioBC : CasoATrabajo {
+    implementationTechnology = "Comando CrearTrabajoDesdePartner + evento TrabajoCreado"
+  }
+
+  /* Cotizaciones: C/S con veto */
+
+  GestionServicioBC [D,C]<-[U,S] CotizacionesBC : CotizacionHaciaTrabajo {
+    implementationTechnology = "Eventos CotizacionEmitida, CotizacionSeleccionada, CotizacionAnulada"
+    downstreamRights = VETO_RIGHT
+  }
+
+  CotizacionesBC [D,ACL]<-[U,OHS,PL] GestionServicioBC : TrabajoHaciaCotizacion {
+    implementationTechnology = "Eventos TrabajoListoParaCotizar, RecotizacionRequerida, TrabajoCancelado"
+  }
+
+  /* Asistente IA */
+
+  AsistenteIABC [D,ACL]<-[U,OHS,PL] MarketplaceBC : SolicitudParaDiagnostico {
+    implementationTechnology = "Eventos de solicitud / chat"
+  }
+
+  MarketplaceBC [D,ACL]<-[U,OHS,PL] AsistenteIABC : DiagnosticoPropuesto {
+    implementationTechnology = "DiagnosticoPropuesto. Marketplace acepta o rechaza"
+  }
+
+  AsistenteIABC [D,ACL]<-[U,OHS,PL] VerificacionesBC : ExpedienteParaAsistencia {
+    implementationTechnology = "Eventos ExpedienteAbierto, DocumentoRecibido"
+  }
+
+  AsistenteIABC [D,ACL]<-[U,OHS,PL] GestionServicioBC : EventosParaPriorizacion {
+    implementationTechnology = "Eventos de novedad / pico"
+  }
+
+  AsistenteIABC [D,ACL]<-[U,OHS,PL] AlianzasBC : EventosParaPriorizarSiniestros {
+    implementationTechnology = "Eventos CasoRecibido, SLAEnRiesgo"
+  }
+
+  /* Pagos B2C */
+
+  PagosBC [D,ACL]<-[U,OHS,PL] GestionServicioBC : CustodiaSegunEstado {
+    implementationTechnology = "Eventos TrabajoAsignado, TrabajoCerrado, TrabajoCancelado"
+  }
+
+  PasarelaDePagos [U]->[D,ACL] PagosBC : ACL_Pasarela {
+    implementationTechnology = "Adaptador de pasarela"
+  }
+
+  /* Control de calidad / reputacion */
+
+  ControlCalidadBC [D,ACL]<-[U,OHS,PL] GestionServicioBC : CierreHaciaCalidad {
+    implementationTechnology = "Evento TrabajoCerrado. Escalamiento desde MonitoreoOperativo"
+  }
+
+  MarketplaceBC [D,ACL]<-[U,OHS,PL] ControlCalidadBC : ReputacionHaciaMatching {
+    implementationTechnology = "Evento ReputacionActualizada"
+  }
+
+  ProveedoresBC [D,ACL]<-[U,OHS,PL] ControlCalidadBC : ReputacionHaciaPerfil {
+    implementationTechnology = "Evento ReputacionActualizada (proyeccion). No escribe expediente)"
+  }
+
+  /* Ciclo hacia Alianzas / partner */
+
+  GestionServicioBC [U,OHS,PL]->[D,ACL] AlianzasBC : CicloHaciaPartner {
+    implementationTechnology = "Eventos de estado, novedad y cierre"
+  }
+
+  ControlCalidadBC [U,OHS,PL]->[D,ACL] AlianzasBC : DisputaHaciaPartner {
+    implementationTechnology = "Eventos DisputaAbierta, DisputaCerrada"
+  }
+
+  EcosistemaPartnersB2B2C [U]->[D,ACL] AlianzasBC : ACL_EntradaPartner {
+    implementationTechnology = "Adaptador por partner"
+  }
+
+  AlianzasBC [U,OHS,PL]->[D,CF] EcosistemaPartnersB2B2C : OHS_SalidaPartner {
+    implementationTechnology = "PL de estado, evidencias y factura"
+  }
+
+  /* Verificacion externa: ACL */
+
+  SistemasDeVerificacionExterna [U]->[D,ACL] VerificacionesBC : ACL_Verificacion {
+    implementationTechnology = "Adaptadores. IA asiste. No decide invariantes"
+  }
+
+  /* Fintech */
+
+  FintechBC [D,ACL]<-[U,OHS,PL] GestionServicioBC : HistoriaParaScoring {
+    implementationTechnology = "Eventos TrabajoCerrado, TrabajoCancelado"
+  }
+
+  FintechBC [D,ACL]<-[U,OHS,PL] ControlCalidadBC : CalificacionParaScoring {
+    implementationTechnology = "Eventos CalificacionRegistrada, DisputaCerrada"
+  }
+
+  FintechBC [D,ACL]<-[U,OHS,PL] PagosBC : LiquidacionHaciaBilletera {
+    implementationTechnology = "Evento ProveedorLiquidado"
+  }
+
+  /* Canales */
+
+  CanalesDigitales [D,ACL]<-[U,OHS,PL] MarketplaceBC : UI_delgada {
+    implementationTechnology = "BFF / API de aplicacion"
+  }
+
+  CanalesDigitales [D,CF]<-[U,OHS] AutenticacionBC : LoginCanales {
+    implementationTechnology = "OIDC"
+  }
+
+  /* Notificaciones */
+
+  NotificacionesBC [D,CF]<-[U,OHS,PL] GestionServicioBC : AvisosTrabajo {
+    implementationTechnology = "Eventos de ciclo de vida"
+  }
+
+  NotificacionesBC [D,CF]<-[U,OHS,PL] CotizacionesBC : AvisosCotizacion {
+    implementationTechnology = "Eventos de cotizacion"
+  }
+
+  NotificacionesBC [D,CF]<-[U,OHS,PL] AlianzasBC : AvisosPartner {
+    implementationTechnology = "Eventos de aprobacion / SLA"
+  }
+
+  /* Separate Ways: no hay relacion FintechBC — AlianzasBC/FacturaAPartner. 
+  
+  Fintech financia al proveedor
+  Alianzas factura al partner
+  mercados distintos por lo que no hay contrato entre esos modelos.
+  
+  */
+
+
+}

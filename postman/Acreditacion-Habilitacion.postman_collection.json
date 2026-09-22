@@ -1,0 +1,306 @@
+{
+  "info": {
+    "name": "Acreditación y Habilitación — Escenario 8 (Disponibilidad)",
+    "description": "Coleccion para demostrar en vivo el escenario de calidad #8: tolerancia a fallos en dependencias externas (Policia Nacional / RUES) mediante circuit breaker + cache de validaciones previas.\n\nOrden sugerido: correr la carpeta '0. Salud', luego '1. Preparar proveedor', y finalmente '2. Escenario 8' de arriba hacia abajo, sin saltar pasos (el circuito necesita 3 fallos consecutivos para abrirse).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5004" },
+    { "key": "proveedor_id", "value": "11111111-1111-1111-1111-111111111111" }
+  ],
+  "item": [
+    {
+      "name": "0. Salud",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Servicio arriba (200)', () => pm.response.to.have.status(200));",
+                  "pm.test('Es el servicio correcto', () => {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.service).to.eql('acreditacion-habilitacion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Preparar proveedor",
+      "item": [
+        {
+          "name": "Acreditar proveedor (setup)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/proveedores", "host": ["{{base_url}}"], "path": ["proveedores"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"proveedor_id\": \"{{proveedor_id}}\",\n  \"nombre\": \"Juan Perez\",\n  \"categorias\": [\"PLOMERIA\"],\n  \"ciudades\": [\"Bogota\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Proveedor creado/acreditado (201)', () => pm.response.to.have.status(201));",
+                  "pm.test('Queda HABILITADO', () => {",
+                  "  const data = pm.response.json();",
+                  "  pm.expect(data.estado).to.eql('HABILITADO');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmar habilitacion (back-office, sincrono)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/habilitacion",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "habilitacion"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('estado = HABILITADO', () => pm.expect(pm.response.json().estado).to.eql('HABILITADO'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Escenario 8 — Circuit breaker + cache",
+      "item": [
+        {
+          "name": "1. Verificacion normal (circuito CERRADO)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('aprobado = true', () => pm.expect(pm.response.json().aprobado).to.eql(true));",
+                  "pm.test('NO viene de cache (llamada real)', () => pm.expect(pm.response.json().desde_cache).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Activar falla simulada de Policia Nacional",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/admin/simular-falla-policia", "host": ["{{base_url}}"], "path": ["admin", "simular-falla-policia"] },
+            "body": { "mode": "raw", "raw": "{\n  \"activa\": true\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('falla activa', () => pm.expect(pm.response.json().falla_policia_nacional_activa).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Intento 1 (falla, circuito sigue CERRADO)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('responde algo (200 o 503 segun si ya hay cache)', () => {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Intento 2 (falla, circuito sigue CERRADO)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('responde algo (200 o 503 segun si ya hay cache)', () => {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Intento 3 (falla_max=3 => circuito se ABRE aqui)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('responde algo (200 o 503 segun si ya hay cache)', () => {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Verificacion con circuito ABIERTO (debe venir de cache, <500ms)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK (servido desde cache, no 503)', () => pm.response.to.have.status(200));",
+                  "pm.test('desde_cache = true — ESTE es el punto del escenario 8', () => {",
+                  "  pm.expect(pm.response.json().desde_cache).to.eql(true);",
+                  "});",
+                  "pm.test('latencia reportada por el servicio < 500ms (metrica del escenario 8)', () => {",
+                  "  pm.expect(pm.response.json().latencia_ms).to.be.below(500);",
+                  "});",
+                  "pm.test('latencia real HTTP de Postman tambien < 500ms', () => {",
+                  "  pm.expect(pm.response.responseTime).to.be.below(500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Restaurar Policia Nacional (desactivar falla)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/admin/simular-falla-policia", "host": ["{{base_url}}"], "path": ["admin", "simular-falla-policia"] },
+            "body": { "mode": "raw", "raw": "{\n  \"activa\": false\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('falla desactivada', () => pm.expect(pm.response.json().falla_policia_nacional_activa).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. (Esperar 30s) Verificacion con circuito medio-abierto -> cierra",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/proveedores/{{proveedor_id}}/verificar-antecedentes",
+              "host": ["{{base_url}}"],
+              "path": ["proveedores", "{{proveedor_id}}", "verificar-antecedentes"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// reset_timeout=30s en pybreaker: si corres este request antes de que",
+                  "// pasen 30s desde que el circuito se abrio (paso 5), pybreaker lo va a",
+                  "// mantener OPEN y este seguira sirviendo desde cache -- es el comportamiento",
+                  "// correcto, no un error. Espera ~30s despues del paso 5/7 antes de correr este."
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('ya NO viene de cache (circuito cerro, llamada real exitosa)', () => {",
+                  "  pm.expect(pm.response.json().desde_cache).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

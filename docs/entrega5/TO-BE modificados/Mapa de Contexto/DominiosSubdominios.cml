@@ -1,0 +1,95 @@
+Domain HogarDeLosAlpes {
+
+    
+  domainVisionStatement = "Conectar hogares, aseguradoras, bancos y comercios que buscan soluciones a problemas del hogar relacionados con plomeria, baldosería, electricidad, carpinteria y pintura, con proveedores de servicios verificados (sean independientes o alguna empresa de servicios), buscando una orquestacion completa desde una consulta hasta el pago y calificacion del servicio prestado y soportado por una plataforma que es capaz de escalar apropiadamente para la expansion propuesta del negocio a nuevos paises."
+
+  Subdomain GestionServicio {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Orquestar el ciclo de vida del trabajo, gestionando el orden, bloqueos y manejo de trabajos paralelos."
+  }
+
+  Subdomain Marketplace {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Publicar trabajos y hacer emparejamiento de demanda con proveedores disponibles."
+  }
+
+  Subdomain AlianzasB2B2C {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar los trabajos de siniestros e instalacion con partners a traves de integraciones con el sistema."
+  }
+
+  Subdomain Verificaciones {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Manejar la verificacion de antecedentes y documentacion de proveedores por servicio y zona."
+  }
+
+  Subdomain Cotizaciones {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar la creacion, seleccion y distribucion de cotizaciones a proveedores."
+  }
+
+  Subdomain AsistenteIA {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Diagnostico a traves de agente IA para categoria, urgencia, ubicacion y evidencia."
+  }
+
+  /* SUPPORTING_DOMAIN */
+
+  Subdomain Proveedores {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Gestionar la informacion de proveedores: perfil, servicios que prestan, cobertura geografica y reputacion."
+  }
+
+  Subdomain MonitoreoOperativo {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Trabajo de los agentes para gestionar actividades de monitoreo de avance, novedades y disputas."
+  }
+
+  Subdomain ControlCalidad {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Gestionar actividades y reglamentos para resolver disputas sobre la calidad del servicio prestado (puede variar depende del territorio)."
+  }
+
+  Subdomain EvidenciasYExpediente {
+    type = SUPPORTING_DOMAIN
+    domainVisionStatement = "Recoleccion, consolidacion y sincronizacion de evidencias (fotos, documentos, bitacora) exigidas por partners y por auditoria interna."
+  }
+
+  /* GENERIC_SUBDOMAIN */
+
+  Subdomain Pagos {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Procesamiento de pagos y facturacion por servicio con pasarelas externas."
+  }
+
+  Subdomain Autenticacion {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Autenticacion y autorizacion de usuarios en la plataforma."
+  }
+
+  Subdomain NotificacionesYComunicaciones {
+    type = GENERIC_SUBDOMAIN
+    domainVisionStatement = "Mensajeria a clientes, proveedores y partners."
+  }
+}
+
+/* Fintech deja de ser un Subdomain de HogarDeLosAlpes y pasa a ser su
+ * propio Domain raiz. Feedback recibido: Fintech es una linea de negocio
+ * propia (inclusion financiera de proveedores mediante billetera y
+ * micro-prestamos), con una propuesta de valor distinta a "conectar
+ * hogares con proveedores verificados". Que dependa de eventos de
+ * HogarDeLosAlpes (historial de trabajos como fuente de scoring) no lo
+ * convierte en un subdominio de ese negocio -- es la misma relacion de
+ * Separate Ways que ya declara Contextos.cml entre FintechBC y
+ * AlianzasBC/FacturaAPartner: mercados distintos, sin contrato de
+ * dominio compartido.
+ */
+Domain ServiciosFinancierosProveedores {
+
+  domainVisionStatement = "Dar acceso a servicios financieros (billetera digital y micro-prestamos) a los proveedores de servicios del hogar, muchos de ellos profesionales independientes sin bancarizacion ni historial crediticio formal, usando su historial de trabajos completados y calificaciones como fuente alterna de scoring."
+
+  Subdomain Fintech {
+    type = CORE_DOMAIN
+    domainVisionStatement = "Gestionar wallets y micro-prestamos a proveedores usando su historial crediticio derivado de trabajos completados."
+  }
+}
